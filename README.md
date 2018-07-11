@@ -32,4 +32,8 @@ A python 3.6 / PyQt5 based application that assists you as a mathematician in ed
     * You may want to try HTTPS if SSH is not working.  I've found SSH to result in authentication errors.
     
     * If you're a complete newbie, TortoiseGit after install is accessed by right-clicking anywhere in a folder explorer.
-          
+     
+    * Clone by right clicking a blank area in folder explorer (outside of any pre-existing git repository) and selecting
+        "Git clone...".  You should see a "Load Putty Key" feature.  Select and find your previously stored private key.
+    
+    * Should you ever get authentication errors, just repeat the above procedure and forget / delete your previous keys.
