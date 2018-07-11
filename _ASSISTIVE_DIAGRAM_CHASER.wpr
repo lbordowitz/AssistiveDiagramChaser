@@ -1,0 +1,26 @@
+#!wing
+#!version=6.0
+##################################################################
+# Wing IDE project file                                          #
+##################################################################
+[project attributes]
+proj.directory-list = [{'dirloc': loc('docs'),
+                        'excludes': (),
+                        'filter': '*',
+                        'include_hidden': False,
+                        'recursive': True,
+                        'watch_for_changes': True},
+                       {'dirloc': loc('.'),
+                        'excludes': [u'main_window.ui'],
+                        'filter': '*',
+                        'include_hidden': False,
+                        'recursive': True,
+                        'watch_for_changes': True}]
+proj.file-list = [loc('geom_tools.py'),
+                  loc('graph_editor.py'),
+                  loc('graph_node.py'),
+                  loc('graph_scene.py'),
+                  loc('main.py'),
+                  loc('qt_tools.py')]
+proj.file-type = 'shared'
+proj.main-file = loc('main.py')

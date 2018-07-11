@@ -1,0 +1,3 @@
+
+Remove things from qt/geom_tools that this library will not be using.
+
