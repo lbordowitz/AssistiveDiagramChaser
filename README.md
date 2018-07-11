@@ -20,15 +20,16 @@ A python 3.6 / PyQt5 based application that assists you as a mathematician in ed
 6. Open the .wpr file contained in the source files.  That is the Wing project file.
 
 7. Install TortoiseGit including PuttyGen if neccessary.
-    a. Run PuttyGen to generate a public key and before exiting the dialog:
+        
+        a. Run PuttyGen to generate a public key and before exiting the dialog:
     
-    b. Copy/paste the entire public key text to your GitHub account settings, where you add access keys.
+        b. Copy/paste the entire public key text to your GitHub account settings, where you add access keys.
     
-    c. Save the private key to your home folder, or desktop, or somewhere you'll find it later.
+        c. Save the private key to your home folder, or desktop, or somewhere you'll find it later.
     
-    d. Now you can clone this project, and:
+        d. Now you can clone this project, and:
    
-    e. You may want to try HTTPS if SSH is not working.  I've found SSH to result in authentication errors.
+        e. You may want to try HTTPS if SSH is not working.  I've found SSH to result in authentication errors.
     
-    f. If you're a complete newbie, TortoiseGit after install is accessed by right-clicking anywhere in a folder explorer.
+        f. If you're a complete newbie, TortoiseGit after install is accessed by right-clicking anywhere in a folder explorer.
           
