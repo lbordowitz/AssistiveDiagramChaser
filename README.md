@@ -21,15 +21,15 @@ A python 3.6 / PyQt5 based application that assists you as a mathematician in ed
 
 7. Install TortoiseGit including PuttyGen if neccessary.
         
-        a. Run PuttyGen to generate a public key and before exiting the dialog:
+    * Run PuttyGen to generate a public key and before exiting the dialog:
     
-        b. Copy/paste the entire public key text to your GitHub account settings, where you add access keys.
+    * Copy/paste the entire public key text to your GitHub account settings, where you add access keys.
     
-        c. Save the private key to your home folder, or desktop, or somewhere you'll find it later.
+    * Save the private key to your home folder, or desktop, or somewhere you'll find it later.
     
-        d. Now you can clone this project, and:
+    * Now you can clone this project, and:
    
-        e. You may want to try HTTPS if SSH is not working.  I've found SSH to result in authentication errors.
+    * You may want to try HTTPS if SSH is not working.  I've found SSH to result in authentication errors.
     
-        f. If you're a complete newbie, TortoiseGit after install is accessed by right-clicking anywhere in a folder explorer.
+    * If you're a complete newbie, TortoiseGit after install is accessed by right-clicking anywhere in a folder explorer.
           
