@@ -7,7 +7,7 @@ A python 3.6 / PyQt5 based application that assists you as a mathematician in ed
 
 1. Install WingWare Pro: http://wingware.com/downloads/wing-pro
     Licenses are ~ $100.  This is essentially the best debugging IDE out there for python.
-    You could use other IDE's, however, you have to add the source files to the project and set it all up yourself.
+    You could use other IDE's, though I myself don't use them and can't help you debug / set things up.
     
 2. Install python 3.5 or higher, though this was written with 3.6 in mind.
 
