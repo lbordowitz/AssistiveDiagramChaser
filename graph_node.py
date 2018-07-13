@@ -7,34 +7,45 @@ from geom_tools import paintSelectionShape, rectToPoly, mag2D, closestRectPoint,
 from text_item import TextItem
 from gfx_object import GfxObject
 from labeled_gfx import LabeledGfx
+from copy import deepcopy
 
 class GraphNode(GfxObject, LabeledGfx):
-    defaultRect = QRectF(-15, -15, 30, 30)
-    defaultCornerRadius = 10
-    defaultInsetPadding = 10
+    DefaultRect = QRectF(-15, -15, 30, 30)
+    DefaultCornerRadius = 10
+    DefaultInsetPadding = 15
     Circle, RoundedRect = range(2)
     
     def __init__(self, new=True):
         super().__init__()
         super().__init__()
         self._contextMenu = None
-        self._fitContents = True
-        self._shape = self.Circle
+        self._shape = self.RoundedRect
         if new:
-            self._insetPadding = self.defaultInsetPadding
-            self._defaultRect = self.defaultRect
-            self._cornerRadius = self.defaultCornerRadius
+            self._insetPadding = self.DefaultInsetPadding
+            self._defaultRect = self.DefaultRect
+            self._cornerRadius = self.DefaultCornerRadius
             self.setFlags(self.ItemIsMovable | self.ItemIsFocusable | self.ItemIsSelectable | self.ItemSendsGeometryChanges)
             self._renderHints = QPainter.Antialiasing | QPainter.HighQualityAntialiasing | QPainter.SmoothPixmapTransform
             self._arrows = []
             self._boundScale = (1.0, 1.0)
-            self._labels = []
             self.setFiltersChildEvents(True)
             self._brush = SimpleBrush(Qt.cyan)
             self._pen = Pen(Qt.yellow, 2.0)
             self.setupConnections()
         self.setAcceptHoverEvents(True)
         self._hover = False
+        
+    def __deepcopy__(self, memo):
+        copy = deepcopy(super(), memo)
+        memo[id(self)] = copy
+        copy._shape = self._shape
+        copy._insetPadding = self._insetPadding
+        copy._cornerRadius = self._cornerRadius
+        copy._arrows = deepcopy(self._arrows, memo)
+        copy._boundScale = tuple(self._boundScale)
+        copy._brush = deepcopy(self._brush, memo)
+        copy.setupConnections()
+        return copy        
 
     def hoverEnterEvent(self, event):
         self._hover = True
@@ -45,7 +56,7 @@ class GraphNode(GfxObject, LabeledGfx):
         super().hoverLeaveEvent(event)
         
     def sceneEventFilter(self, watched, event):
-        if event.type() == QEvent.GraphicsSceneHoverMove:
+        if event.type() == QEvent.GraphicsSceneMouseMove:
             self.updateArrows()
             self.scene().update()
         return False
@@ -68,6 +79,8 @@ class GraphNode(GfxObject, LabeledGfx):
     def itemChange(self, change, value):
         if change == self.ItemPositionChange:
             self.updateArrows()
+            if self.scene():
+                self.scene().update()
         return super().itemChange(change, value)    
 
     def arrows(self):
@@ -77,11 +90,10 @@ class GraphNode(GfxObject, LabeledGfx):
         self._arrows.append(arr)
         
     def removeArrow(self, arr):
-        self._arrows.remove(arr)
+        if arr in self._arrows:
+            self._arrows.remove(arr)
             
     def boundingRect(self):
-        if not self._fitContents:
-            return self._defaultRect
         w = self._insetPadding
         rect = self.childrenBoundingRect()
         rect.translate(-rect.center())
@@ -90,7 +102,7 @@ class GraphNode(GfxObject, LabeledGfx):
     
     def setDefaultBoundingRect(self, rect=None):
         if rect is None:
-            rect = self.defaultRect
+            rect = self.DefaultRect
         self._defaultRect = rect
         self.update()
         
@@ -135,48 +147,37 @@ class GraphNode(GfxObject, LabeledGfx):
         child.setPos(child.pos() + delta)
 
     def closestBoundaryPos(self, pos):
-        if not self._fitContents:
-            rect = self.boundingRect()
-            radius = max(rect.width(), rect.height())/2
-            r = pos - rect.center()
-            mag_r = mag2D(r)
-            if mag_r == 0:
-                return rect.center()
-            r /= mag_r
-            r *= radius
-            return r  
+        rect = self.boundingRect()
+        #s = self._boundScale
+        #T = QTransform.fromScale(1/s[0], 1/s[1])
+        #rect = T.mapRect(rect)
+        if pos.x() < rect.left():
+            x = rect.left()
+        elif pos.x() > rect.right():
+            x = rect.right()
         else:
-            rect = self.boundingRect()
-            #s = self._boundScale
-            #T = QTransform.fromScale(1/s[0], 1/s[1])
-            #rect = T.mapRect(rect)
-            if pos.x() < rect.left():
-                x = rect.left()
-            elif pos.x() > rect.right():
-                x = rect.right()
-            else:
-                x = pos.x()
-            if pos.y() < rect.top():
-                y = rect.top()
-            elif pos.y() > rect.bottom():
-                y = rect.bottom()
-            else:
-                y = pos.y()
-            rect_point = QPointF(x, y)
-            r = self.cornerRadius()
-            poly = None
-            if mag2D(rect_point - rect.bottomRight()) <= r:
-                poly = polygonFromArc(rect.bottomRight() + QPointF(-r, -r), r, 0, 90, seg=30)
-            elif mag2D(rect_point - rect.topRight()) <= r:
-                poly = polygonFromArc(rect.topRight() + QPointF(-r, r), r, 270, 360, seg=30)
-            elif mag2D(rect_point - rect.topLeft()) <= r:
-                poly = polygonFromArc(rect.topLeft() + QPointF(r, r), r, 180, 270, seg=30)
-            elif mag2D(rect_point - rect.bottomLeft()) <= r:
-                poly = polygonFromArc(rect.bottomLeft() + QPointF(r, -r), r, 90, 180, seg=30)
-            if poly is None:
-                return rect_point
-            else:
-                return closestPolyPoint(poly, pos)[0]
+            x = pos.x()
+        if pos.y() < rect.top():
+            y = rect.top()
+        elif pos.y() > rect.bottom():
+            y = rect.bottom()
+        else:
+            y = pos.y()
+        rect_point = QPointF(x, y)
+        r = self.cornerRadius()
+        poly = None
+        if mag2D(rect_point - rect.bottomRight()) <= r:
+            poly = polygonFromArc(rect.bottomRight() + QPointF(-r, -r), r, 0, 90, seg=30)
+        elif mag2D(rect_point - rect.topRight()) <= r:
+            poly = polygonFromArc(rect.topRight() + QPointF(-r, r), r, 270, 360, seg=30)
+        elif mag2D(rect_point - rect.topLeft()) <= r:
+            poly = polygonFromArc(rect.topLeft() + QPointF(r, r), r, 180, 270, seg=30)
+        elif mag2D(rect_point - rect.bottomLeft()) <= r:
+            poly = polygonFromArc(rect.bottomLeft() + QPointF(r, -r), r, 90, 180, seg=30)
+        if poly is None:
+            return rect_point
+        else:
+            return closestPolyPoint(poly, pos)[0]
     
     def updateArrows(self):
         for arr in self._arrows:
@@ -197,18 +198,7 @@ class GraphNode(GfxObject, LabeledGfx):
         col_menu = menu.addMenu("Color")
         col_menu.addAction("Brush").triggered.connect(lambda: self._brushColorDlg.exec_())
         col_menu.addAction("Pen").triggered.connect(lambda: self._penColorDlg.exec_())
-        fit = menu.addAction("Fit Contents")
-        fit.triggered.connect(self.setFitContents)
-        fit.setCheckable(True)
-        fit.setChecked(self._fitContents)
         return menu
-    
-    def setFitContents(self, fit):
-        self._fitContents = fit
-        self.scene().update()
-        
-    def fitContents(self):
-        return self._fitContents    
     
     def setContextMenu(self, menu):
         self._contextMenu = menu
@@ -239,4 +229,6 @@ class GraphNode(GfxObject, LabeledGfx):
         label = super().addLabel(label)
         if isinstance(label, TextItem):
             label.onPositionChanged = self.updateArrowsAndClearResidual
-        
+    
+    def updateGraph(self):
+        self.updateArrows()

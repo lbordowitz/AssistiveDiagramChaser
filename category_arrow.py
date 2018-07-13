@@ -2,22 +2,46 @@ from graph_arrow import GraphArrow
 from text_item import TextItem
 from PyQt5.QtCore import QPointF, Qt, QLineF, QRectF
 from PyQt5.QtWidgets import QMenu, QActionGroup
-from PyQt5.QtGui import QPainter, QBrush, QPainterPath, QPainterPathStroker, QPen
+from PyQt5.QtGui import QPainter, QBrush, QPainterPath, QPainterPathStroker
 from qt_tools import Pen
 from geom_tools import mag2D, dot2D, paintSelectionShape
 from math import pi
+from category import Category
+from copy import deepcopy
+import re
 
 class CategoryArrow(GraphArrow):
-    def __init__(self):
+    def __init__(self, new=True):
         super().__init__()
-        label = self.addLabel(TextItem("f"))
-        label.setPos(self.pointCenter())
+        if new:
+            label = self.addLabel(TextItem("f"))
         self._exists = False
         self._epi = False
         self._mono = False
         self._isom = False
-        self._firstTimeNonzero = True
-
+        self._editor = None
+        self._graphAlgoVisited = False
+        self._functor = False
+        
+    def __deepcopy__(self, memo):
+        copy = deepcopy(super(), memo)
+        memo[id(self)] = copy
+        copy._exists = self._exists
+        copy._epi = self._epi
+        copy._mono = self._mono
+        copy._isom = self._isom
+        copy._editor = self._editor
+        return copy
+    
+    def isFunctor(self):
+        return isinstance(self.toNode(), Category) and isinstance(self.fromNode(), Category)
+        
+    def editor(self):
+        return self._editor
+    
+    def setEditor(self, editor):
+        self._editor = editor
+        
     def buildDefaultContextMenu(self, menu=None):
         if menu is None:
             menu = QMenu()
@@ -56,15 +80,18 @@ class CategoryArrow(GraphArrow):
         return not self._exists
     
     def setIsomorphism(self, isom):
-        label = self.findLabel("~")
-        if label:
-            if isom is False:
-                self.removeLabel(label)
-                self._isom = False
-        else:
-            if isom:
-                self.addLabel(TextItem("~")).setPos(self.pointCenter())
-                self._isom = True
+        if isom != self._isom:
+            labels = self.findLabels("~")
+            if labels:
+                if isom is False:
+                    for label in labels:
+                        self.removeLabel(label)
+                    self._isom = False
+            else:
+                if isom:
+                    if self.findLabel("~") is None:
+                        self.addLabel(TextItem("~"))
+                    self._isom = True   
                 
     def isIsomorphism(self):
         return self._isom
@@ -113,10 +140,10 @@ class CategoryArrow(GraphArrow):
         u = line.p2() - line.p1()
         v = QPointF(u.y(), -u.x())
         mag_u = mag2D(u)
-        if mag_u != 0:
+        if abs(mag_u) != 0:
             if self._firstTimeNonzero:
                 self._firstTimeNonzero = False
-                self.label(0).setPos(self.pointCenter())
+                self.label(-1).setPos(self.pointCenter())
             u /= mag_u
             v /= mag_u
         r = self.arrowHeadSize() 
@@ -154,5 +181,68 @@ class CategoryArrow(GraphArrow):
         return QLineF(self._points[0].pos(), self._points[1].pos())
     
     def shape(self):
-        stroker = QPainterPathStroker(QPen(Qt.black, self.arrowHeadSize() * 2))
+        stroker = QPainterPathStroker(Pen(Qt.black, self.arrowHeadSize() * 2))
         return stroker.createStroke(self.tailPath())
+    
+    def addLabel(self, label):
+        self._firstTimeNonzero = True
+        label = super().addLabel(label)
+        label.setPos(self.pointCenter())
+        label.setParentItem(self)
+        return label
+    
+    def arrowHeadSize(self):
+        return 7
+    
+    def takeFunctorImage(self):
+        C = self.fromNode()
+        D = self.toNode()
+        if self.isFunctor():
+            obj_list = C.deepcopyGraph()
+            fun = self.labelText(0)
+            for obj in obj_list:
+                obj.clearGraphAlgoVisitedFlag()                
+            for obj in obj_list:
+                obj.setLabelText(0, fun + "(" + obj.labelText(0) + ")")
+                self.editor().addObjectToCategory(obj, D) 
+                for arr in obj.arrows():
+                    if not arr.graphAlgoVisited():
+                        arr.setGraphAlgoVisitedFlag()
+                        arr.setLabelText(0, fun + "(" + arr.labelText(0) + ")")
+            D.updateArrows()
+                            
+    def undoTakeFunctorImage(self):
+        C = self.fromNode()
+        D = self.toNode()
+        if isinstance(C, Category) and isinstance(D, Category):
+            obj_list = D.objects()
+            for obj in obj_list:
+                obj.clearGraphAlgoVisitedFlag()
+            delete_list = []
+            for k in range(0, len(obj_list)):
+                obj = obj_list[k]
+                label = obj.labelText(0)
+                match = self.functorCompositionRegex().match(label)
+                if match:
+                    delete_list.append(obj)
+                for arr in obj.arrows():
+                    if not arr.graphAlgoVisited():
+                        arr.setGraphAlgoVisitedFlag()
+                        label = arr.labelText(0)
+                        match = self.functorCompositionRegex().match(label)
+                        if match:
+                            delete_list.append(arr)
+            self.editor().deleteItems(delete_list)
+            
+    def graphAlgoVisited(self):
+        return self._graphAlgoVisited
+    
+    def clearGraphAlgoVisitedFlag(self):
+        self._graphAlgoVisited = False
+        
+    def setGraphAlgoVisitedFlag(self):
+        self._graphAlgoVisited = True
+        
+    def functorCompositionRegex(self):
+        fun = self.labelText(0)
+        return re.compile(fun + r'\((?P<arg>.+)\)')

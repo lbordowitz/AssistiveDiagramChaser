@@ -2,7 +2,7 @@ from math import sqrt, sin, cos, pi, inf, acos, tan, atan2
 from PyQt5.QtGui import QPolygonF, QMatrix4x4, QMatrix3x3, QTransform, QPen
 from PyQt5.QtCore import QLineF, QPointF, QRectF, Qt
 from cmath import exp, phase
-from qt_tools import simpleMaxContrastingColor
+from qt_tools import simpleMaxContrastingColor, Pen
 
 # Geometric Transformations
 
@@ -325,7 +325,6 @@ def orthogonalRectDelta(r0, r1):
             
     return min_delta
         
-        
     
 def paintSelectionShape(painter, item):
     path = item.shape()
@@ -337,9 +336,7 @@ def paintSelectionShape(painter, item):
     T *= matrix3DToTransform(combine3DMatrices(item.transformations()))
     T *= QTransform.fromScale(*s)
     path = T.map(path)
-
     painter.save()
-
     painter.resetTransform()
     dx, dy = extractTransformTranslate(P)
     painter.translate(dx, dy)
@@ -347,8 +344,6 @@ def paintSelectionShape(painter, item):
     col1 = simpleMaxContrastingColor(col)
     painter.strokePath(path, QPen(col1, 1.0))
     painter.strokePath(path, QPen(col, 1.0, Qt.DashLine))
-    
-
     painter.restore()        
     
     

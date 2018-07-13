@@ -9,11 +9,6 @@ from PyQt5.QtGui import QTransform
 from graph_scene import GraphScene
 from main_window import MainWindow
 
-
-def createItem(type):
-    return eval(type)()
-
-
 if __name__ == '__main__':
     app = QApplication([])
 

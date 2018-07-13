@@ -11,17 +11,16 @@ class GfxObject(QGraphicsObject):
     focusedOut = pyqtSignal()
     zoomedIn = pyqtSignal()
     
-    DefaultZoomThreshold = 6
+    DefaultZoomThreshold = 3
     
-    def __init__(self):
+    def __init__(self, new=True):
         super().__init__()
-        self._pen = Pen(Qt.NoPen)
-        self._brush = SimpleBrush(Qt.NoBrush)
-        self._undoStack = None
-        self._totalDelta = None
-        self._locked = False
-        self._snapToGrid = True
-        self._zoomThreshold = self.DefaultZoomThreshold
+        if new:
+            self._pen = Pen(Qt.NoPen)
+            self._brush = SimpleBrush(Qt.NoBrush)
+            self._locked = False
+            self._snapToGrid = True
+            self._zoomThreshold = self.DefaultZoomThreshold
         self._zoom = 0
         
     def __setstate__(self, data):
@@ -44,8 +43,9 @@ class GfxObject(QGraphicsObject):
             'locked' : self._locked
         }
         
-    def _deepcopy(self, copy, memo):
-        memo[id(self)] = self
+    def __deepcopy__(self, memo):
+        copy = type(self)(new=False)
+        memo[id(self)] = copy
         copy.setParentItem(deepcopy(self.parentItem(), memo))
         copy._pen = deepcopy(self._pen, memo)
         copy._brush = deepcopy(self._brush, memo)
@@ -53,6 +53,7 @@ class GfxObject(QGraphicsObject):
         copy.setPos(QPointF(self.pos()))
         copy.setFlags(self.flags())
         copy._locked = self._locked
+        return copy
     
     def locked(self):
         return self._locked
@@ -146,6 +147,11 @@ class GfxObject(QGraphicsObject):
         if self._zoom >= self._zoomThreshold:
             self.zoomedIn.emit()
             
+    def isZoomedIn(self):
+        if self._zoom >= self._zoomThreshold:
+            return True
+        return False
+            
     def closestBoundaryPosToItem(self, item):
         if self.collidesWithItem(item):
             return self.boundingRect().center()
@@ -178,3 +184,4 @@ class GfxObject(QGraphicsObject):
     
     def closestBoundaryPos(self, pos):
         raise NotImplementedError
+    

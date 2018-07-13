@@ -5,9 +5,8 @@ from qt_tools import PseudoSignal, Pen, unpickleGfxItemFlags
 from copy import deepcopy
 
 class TextItem(QGraphicsTextItem):
-    def __init__(self, text, parent=None):
-        super().__init__(text, parent=parent)
-        self._undoStack = None
+    def __init__(self, text=None, new=True):
+        super().__init__(text)
         self.textChangedHandler = None
         self.setFlags(self.ItemIsMovable | self.ItemIsFocusable | self.ItemIsSelectable | self.ItemSendsGeometryChanges)
         self.mouseDoubleClickHandler = lambda event: self.setTextInteraction(True, select_all=True)
@@ -35,8 +34,9 @@ class TextItem(QGraphicsTextItem):
         }
     
     def __deepcopy__(self, memo):
-        copy = type(self)(self.toPlainText())
-        memo[id(self)] = self
+        copy = type(self)(new=False)
+        copy.setPlainText(self.toPlainText())
+        memo[id(self)] = copy
         copy.setFlags(self.flags())
         copy.setDefaultTextColor(self.defaultTextColor())
         copy._undoStack = None              # Can't copy an undo stack since it holds references to this item and will change /it/

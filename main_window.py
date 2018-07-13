@@ -6,7 +6,6 @@ from graph_node import GraphNode
 from graph_scene import GraphScene
 from category_diagram_editor import CategoryDiagramEditor
 from PyQt5.QtCore import QPointF, Qt
-from code_editor import CodeEditor
 
 class MainWindow(QMainWindow, Ui_MainWindow):
     def __init__(self, new=True):
@@ -18,9 +17,19 @@ class MainWindow(QMainWindow, Ui_MainWindow):
             self._editors = {}
             self.addEditor("main")
         
+        self.actionDelete.triggered.connect(lambda b: self.deleteSelectedItems())
+        
     def addEditor(self, name):
         editor = CategoryDiagramEditor()
         self.tabWidget.addTab(editor, name)
         self._editors[name] = editor
         editor.setScene(GraphScene())
+        
+    def currentEditor(self):
+        return self.tabWidget.currentWidget()
+    
+    def deleteSelectedItems(self):
+        editor = self.currentEditor()
+        if editor:
+            editor.deleteItems()
     

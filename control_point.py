@@ -2,25 +2,35 @@ from gfx_object import GfxObject
 from PyQt5.QtCore import QPointF, Qt, QRectF, pyqtSignal
 from qt_tools import Pen, SimpleBrush
 from geom_tools import mag2D, paintSelectionShape
+from copy import deepcopy
 
 class ControlPoint(GfxObject):
-    DefaultRadius = 7
+    DefaultRadius = 4
     positionHasChanged = pyqtSignal(QPointF)
     positionAboutToChange = pyqtSignal(QPointF)
     mouseDragBegan = pyqtSignal(QPointF)
     mouseDragEnded = pyqtSignal(QPointF)
     
-    def __init__(self):
+    def __init__(self, new=True):
         super().__init__()
-        self._radius = self.DefaultRadius
+        if new:
+            self._radius = self.DefaultRadius
+            self.setBrush(SimpleBrush(Qt.yellow))
+            self.setPen(Pen(Qt.NoPen))
+            r = self.DefaultRadius
+            self._rect = QRectF(-r, -r, 2*r, 2*r)
+            self._snapToGrid = False
         self.setFlags(self.ItemIsMovable | self.ItemIsFocusable | self.ItemSendsGeometryChanges | \
                       self.ItemSendsScenePositionChanges | self.ItemIsSelectable)
-        self.setBrush(SimpleBrush(Qt.yellow))
-        self.setPen(Pen(Qt.NoPen))
-        r = self.DefaultRadius
-        self._rect = QRectF(-r, -r, 2*r, 2*r)
         self._dragging = False
-        self._snapToGrid = False
+        
+    def __deepcopy__(self, memo):
+        memo[id(self)] = self
+        copy = deepcopy(super(), memo)
+        copy._radius = self._radius
+        copy._rect = QRectF(self._rect)
+        copy._snapToGrid = self._snapToGrid
+        return copy
         
     def boundingRect(self):
         return self._rect

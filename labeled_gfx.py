@@ -1,4 +1,5 @@
 from text_item import TextItem
+from copy import deepcopy
 
 class LabeledGfx:
     def __init__(self):
@@ -18,19 +19,27 @@ class LabeledGfx:
         return label
         
     def removeLabel(self, label):
-        if isinstance(label, str):
-            k = self.labelIndex(label)
-        else:
-            k = self.labelIndex("~")
-            if k != -1:
-                self._labels.pop(k)
-                self._textPos.pop(k)
-                label.setParentItem(None)
-                label.removeSceneEventFilter(self)
+        k = self.labelIndex(label)
+        if k != -1:
+            self._labels.pop(k)
+            self._textPos.pop(k)
+            if self.scene():
+                self.scene().removeItem(label)
+            label.setParentItem(None)
+            label.removeSceneEventFilter(self)
 
     def labelText(self, label):
+        if isinstance(label, int):
+            label = self.label(label)
         if isinstance(label, TextItem):
             return label.toPlainText()
+        else:
+            raise NotImplementedError
+        
+    def setLabelText(self, k, text):
+        label = self._labels[k]
+        if isinstance(label, TextItem):
+            label.setPlainText(text)
         else:
             raise NotImplementedError
         
@@ -53,6 +62,13 @@ class LabeledGfx:
                 return label
         return None
     
+    def findLabels(self, text):
+        labels = []
+        for lab in self._labels:
+            if self.labelText(lab) == text:
+                labels.append(lab)
+        return labels
+    
     def textIndex(self, text):
         for k in range(0, len(self._labels)):
             if self.labelText(self.label(k)) == text:
@@ -73,3 +89,11 @@ class LabeledGfx:
     
     def updateTextPosition(self):
         raise NotImplementedError
+    
+    def copyLabelsTo(self, copy):
+        for label in self._labels:
+            label_copy = deepcopy(label)
+            copy.addLabel(label_copy)
+        copy.saveTextPosition()
+            
+            

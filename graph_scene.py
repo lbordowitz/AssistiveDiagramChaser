@@ -1,6 +1,6 @@
 from PyQt5.QtWidgets import QGraphicsScene, QGraphicsObject
 from PyQt5.QtGui import QColor, QBrush, QTransform, QPainter, QPen
-from PyQt5.QtCore import pyqtSignal, QPointF, QLineF
+from PyQt5.QtCore import pyqtSignal, QPointF, QLineF, Qt
 from graph_arrow import GraphArrow
 from control_point import ControlPoint
 from qt_tools import simpleMaxContrastingColor
@@ -66,14 +66,16 @@ class GraphScene(QGraphicsScene):
         self._placing = True
         
     def mousePressEvent(self, event):
+        if self._pickGridOrigin:
+            self._gridOrigin = event.scenePos()
+            self.update()
+            self._pickGridOrigin = False
+            return
         if not self._placeItems:
             if not self._moveItems:
                 item = self.itemAt(event.scenePos(), QTransform())
                 if item:
                     if isinstance(item, ControlPoint):
-                    #if item.isSelected():
-                        #self._placeItems = self.selectedItems()
-                    #else:
                         self._placeItems = [item]
                         pos = event.scenePos()
                         self.dragStarted.emit(self._placeItems, pos)
@@ -104,7 +106,15 @@ class GraphScene(QGraphicsScene):
         
     def mouseMoveEvent(self, event):
         if self._placeItems:
-            self._moveItems = self._placeItems
+            self._moveItems = []
+            children = []
+            for item in self._placeItems:
+                children += item.childItems()
+            for item in self._placeItems:
+                if item not in children:
+                    self._moveItems.append(item)
+                else:
+                    item.setSelected(False)
             self._placeItems = None
         if self._moveItems:
             delta = event.scenePos() - event.lastScenePos()
@@ -121,22 +131,18 @@ class GraphScene(QGraphicsScene):
             
     def drawBackground(self, painter, rect):
         super().drawBackground(painter, rect)
-        
         if self._gridEnabled:
             painter.setRenderHints(QPainter.Antialiasing)
-            painter.setPen(QPen(simpleMaxContrastingColor(self.backgroundBrush().color()), 0.3))
+            painter.setPen(QPen(simpleMaxContrastingColor(self.backgroundBrush().color()), 0.4))
             points = []                 # Adding to a list and then drawing is much faster
-            
             o = self._gridOrigin
             ox = o.x() % self._gridSizeX
             oy = o.y() % self._gridSizeY
             left = int(rect.left()) - (int(rect.left()) % self._gridSizeX)
             top = int(rect.top()) - (int(rect.top()) % self._gridSizeY)
-            
             for x in range(left, int(rect.right()), self._gridSizeX):
                 for y in range(top, int(rect.bottom()), self._gridSizeY):
                     points.append(QPointF(x + ox, y + oy))
-        
             painter.drawPoints(*points)
             # Draw grid origin
             painter.drawLine(QLineF(o.x(), o.y() - 20, o.x(), o.y() + 20))
@@ -162,8 +168,8 @@ class GraphScene(QGraphicsScene):
     def gridEnabled(self):
         return self._gridEnabled
     
-    def pickGridOrigin(self):
-        self._pickGridOrigin = True
+    def setPickGridOrigin(self, pick):
+        self._pickGridOrigin = pick
         
     def gridSizeX(self):
         return self._gridSizeX

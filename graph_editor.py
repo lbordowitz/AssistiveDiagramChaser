@@ -1,4 +1,4 @@
-from PyQt5.QtWidgets import QMenu, QActionGroup, QAction
+from PyQt5.QtWidgets import QMenu, QActionGroup, QAction, QLineEdit
 from graph_scene import GraphScene
 from editor import Editor
 from PyQt5.QtCore import Qt, pyqtSignal, QRectF, QObject
@@ -8,6 +8,7 @@ from graph_node import GraphNode
 from graph_arrow import ControlPoint, GraphArrow
 from text_item import TextItem
 from geom_tools import mag2D
+from int_spin_dialog import IntSpinDialog
 
 class GraphEditor(Editor):
     ZoomScreenSizeFraction = 0.7
@@ -22,6 +23,8 @@ class GraphEditor(Editor):
         self.NodeType = GraphNode
         self.ArrowType = GraphArrow
         self._zoomItem = None
+        self._gridSpacing = IntSpinDialog("Grid Spacing: ")
+        self._gridSpacing.spinBox.setMinimum(1)
                 
     def __setstate__(self, data):
         super().__setstate__(data)
@@ -40,6 +43,10 @@ class GraphEditor(Editor):
         self.scene().dragStarted.connect(lambda objs, point: self.setDragMode(self.NoDrag))
         self.scene().dragEnded.connect(lambda objs, point: self.setDragMode(self.RubberBandDrag))
         self.scene().itemsPlaced.connect(self.sceneItemsPlaced)
+        self.scene().setContextMenu(self.buildSceneContextMenu())
+        self._gridSpacing.spinBox.valueChanged.connect(self.scene().setGridSize)
+        self._gridSpacing.spinBox.setValue(self.scene().gridSizeX())
+        self._gridSpacing.spinBox.setMaximum(10000)
         
     def nodes(self):
         return self._nodes
@@ -54,10 +61,21 @@ class GraphEditor(Editor):
         self.scene().addItem(node)
     
     def removeNode(self, node):
-        self._nodes.remove(node)
-        self.scene().removeItem(node)
+        if node in self._nodes:
+            self._nodes.remove(node)
+            for arr in node.arrows():
+                if arr.toNode() is node:
+                    arr.setTo(None)
+                elif arr.fromNode() is node:
+                    arr.setFrom(None)
+            self.scene().removeItem(node)
         
-        focused = pyqtSignal()
+    def removeArrow(self, arr):
+        if arr in self._arrows:
+            self._arrows.remove(arr)
+            self.scene().removeItem(arr)
+            arr.setTo(None)
+            arr.setFrom(None)
         
     def scale(self):
         return self._scale
@@ -115,6 +133,14 @@ class GraphEditor(Editor):
         super().focusInEvent(event)    
         
     def addArrow(self, arr, scene=True):
+        #arr.zoomedIn.connect(lambda: self.arrowZoomedIn(arr))
+        arr.focusedIn.connect(lambda: self.arrowFocusedIn(arr))
+        ctrl_pts = arr.controlPoints()
+        ctrl_pts[0].mouseDragBegan.connect(lambda pos: self.arrowStartAboutToChange(arr, pos))
+        ctrl_pts[-1].mouseDragBegan.connect(lambda pos: self.arrowEndAboutToChange(arr, pos))
+        ctrl_pts[0].mouseDragEnded.connect(lambda pos: self.arrowStartHasChanged(arr, pos))
+        ctrl_pts[-1].mouseDragEnded.connect(lambda pos: self.arrowEndHasChanged(arr, pos))        
+        arr.setContextMenu(self.buildArrowContextMenu(arr))
         self._arrows.append(arr)
         if scene:
             self.scene().addItem(arr)
@@ -124,17 +150,9 @@ class GraphEditor(Editor):
         if item:
             if isinstance(item, self.NodeType):
                 arr = self.ArrowType()
-                arr.setContextMenu(self.buildArrowContextMenu(arr))
                 arr.setFrom(item)
                 self.addArrow(arr)
                 self.scene().placeItems(arr.toPoint(), pos)
-                #arr.zoomedIn.connect(lambda: self.arrowZoomedIn(arr))
-                arr.focusedIn.connect(lambda: self.arrowFocusedIn(arr))
-                ctrl_pts = arr.controlPoints()
-                ctrl_pts[0].mouseDragBegan.connect(lambda pos: self.arrowStartAboutToChange(arr, pos))
-                ctrl_pts[-1].mouseDragBegan.connect(lambda pos: self.arrowEndAboutToChange(arr, pos))
-                ctrl_pts[0].mouseDragEnded.connect(lambda pos: self.arrowStartHasChanged(arr, pos))
-                ctrl_pts[-1].mouseDragEnded.connect(lambda pos: self.arrowEndHasChanged(arr, pos))
                 return arr
         node = self.NodeType()
         node.setContextMenu(self.buildNodeContextMenu(node))
@@ -170,21 +188,25 @@ class GraphEditor(Editor):
     def setCodeEditorTo(self, editor):
         raise NotImplementedError
     
-    def buildNodeContextMenu(self, node):
-        menu = QMenu()
+    def buildNodeContextMenu(self, node, menu=None):
+        if menu is None:
+            menu = QMenu()
         return node.buildDefaultContextMenu(menu) 
     
     def buildArrowContextMenu(self, arr):
         menu = QMenu()
         return arr.buildDefaultContextMenu(menu)
     
-    def buildSceneContextMenu(self):
-        menu = QMenu()
-        return menu
-
-    def buildDefaultContextMenu(self, menu=None):
+    def buildSceneContextMenu(self, menu=None):
         if menu is None:
             menu = QMenu()
+        menu.addSeparator()
+        action = menu.addAction("Snap Grid")
+        action.toggled.connect(lambda b: self.scene().setGridEnabled(b))
+        action.setCheckable(True)
+        action.setChecked(self.scene().gridEnabled())
+        action = menu.addAction("Grid Spacing").triggered.connect(self._gridSpacing.exec_)
+        action = menu.addAction("Pick Grid Origin").triggered.connect(lambda b: self.scene().setPickGridOrigin(True))
         return menu
     
     def itemSelectionChanged(self):

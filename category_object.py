@@ -1,35 +1,45 @@
 from graph_node import GraphNode
 from text_item import TextItem
-from code_widget import CodeWidget
 from PyQt5.QtWidgets import QGraphicsProxyWidget
-from PyQt5.QtGui import QMoveEvent, QColor, QPen
+from PyQt5.QtGui import QMoveEvent, QColor
 from PyQt5.QtCore import QEvent, Qt, QRectF
 from qt_tools import SimpleBrush
+from geom_tools import minBoundingRect
+from copy import deepcopy
 
 class CategoryObject(GraphNode):
-    def __init__(self):
+    def __init__(self, new=True):
         super().__init__()
-        label = TextItem("A")
-        self.addLabel(label)
-        self.centerChild(label)
-        label.setFlag(GraphNode.ItemIsMovable, False)
-        self.setBrush(SimpleBrush(QColor(255,255,255,0)))   # Transparent
+        if new:
+            label = TextItem("x")
+            self.addLabel(label)
+            self.centerChild(label)
+            self.setBrush(SimpleBrush(QColor(255,255,255,0)))   # Transparent
+            self._insetPadding = self.DefaultInsetPadding / 3
+        self._graphAlgoVisited = False
+        self._editor = None
     
-    def eventFilter(self, watched, event):
-        if watched in [self._entryCode, self._exitCode]:
-            if event.type() == QEvent.Move:
-                if self.scene():
-                    self.updateArrows()
-                    self.scene().update()
-            elif event.type() == QEvent.MouseButtonDblClick:
-                print("here")
-        return False
+    def setEditor(self, editor):
+        self._editor = editor
     
-    
-    #def paint(self, painter, option, widget):
-        #super().paint(painter, option, widget)
+    def editor(self):
+        return self._editor
         
-        #painter.setPen(QPen(QColor(Qt.red), 20))
-        #pos = self.mapFromScene(self.pos())
-        #w = 30
-        #painter.drawRect(QRectF(pos.x() - w, pos.y() - w, 2*w, 2*w))
+    def graphAlgoVisited(self):
+        return self._graphAlgoVisited
+    
+    def clearGraphAlgoVisitedFlag(self):
+        self._graphAlgoVisited = False
+        for arr in self._arrows:
+            arr.clearGraphAlgoVisitedFlag()
+        
+    def setGraphAlgoVisitedFlag(self):
+        self._graphAlgoVisited = True
+        
+    def __deepcopy__(self, memo):
+        copy = deepcopy(super(), memo)
+        memo[id(self)] = copy
+        copy._editor = self.editor()
+        self.copyLabelsTo(copy) 
+        return copy
+        

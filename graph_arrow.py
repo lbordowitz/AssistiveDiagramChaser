@@ -1,12 +1,14 @@
 from PyQt5.QtCore import pyqtSignal, Qt, QRectF, QLineF, QPointF, QTimer
 from PyQt5.QtWidgets import QGraphicsObject, QGraphicsSceneMouseEvent, QMenu, QAction
-from PyQt5.QtGui import QBrush, QPainter, QPainterPath, QPen, QPolygonF, QPainterPathStroker
+from PyQt5.QtGui import QBrush, QPainter, QPainterPath, QPolygonF, QPainterPathStroker
 from geom_tools import mag2D, dot2D, rectToPoly, paintSelectionShape
 from math import acos, asin, atan2, pi, sin, cos
 from gfx_object import GfxObject
 from labeled_gfx import LabeledGfx
 from text_item import TextItem
 from control_point import ControlPoint
+from qt_tools import Pen
+from copy import deepcopy
 
 class GraphArrow(GfxObject, LabeledGfx):
     EditTime = 1500
@@ -16,18 +18,14 @@ class GraphArrow(GfxObject, LabeledGfx):
         super().__init__()
         if new:
             self._points = [ControlPoint() for i in range(0, 2)]
-            self._points[0].positionAboutToChange.connect(lambda pos: self.controlPointPosAboutToChange(self._points[0], pos))
-            self._points[-1].positionAboutToChange.connect(lambda pos: self.controlPointPosAboutToChange(self._points[-1], pos))
-            self._points[0].positionHasChanged.connect(lambda pos: self.controlPointPosHasChanged(self._points[0], pos))
-            self._points[-1].positionHasChanged.connect(lambda pos: self.controlPointPosHasChanged(self._points[-1], pos))
             for point in self._points:
                 point.setPos(QPointF(0,0))
-            self.setup()
+            self.setupConnections()
             self._to = None
             self._from = None
-            self._arrowHead = None
-            self._pen = QPen(Qt.black, 1.5, Qt.SolidLine)
+            self._pen = Pen(Qt.black, 1.5, Qt.SolidLine)
             self._textPos = []
+        self._arrowHead = None            
         self.setAcceptHoverEvents(True)
         self.setFlag(self.ItemIsMovable, False)
         self.setFlag(self.ItemIsSelectable, True)
@@ -37,6 +35,21 @@ class GraphArrow(GfxObject, LabeledGfx):
         self._editTimer = None
         self._updatingPos = False
         self._snapToGrid = False
+        
+    def __deepcopy__(self, memo):
+        copy = type(self)(new=False)
+        memo[id(self)] = copy
+        copy._points = deepcopy(self._points, memo)
+        for point in copy._points:
+            point.setParentItem(self)
+        copy._to = deepcopy(self._to, memo)
+        copy._from = deepcopy(self._from, memo)
+        copy._pen = deepcopy(self._pen, memo)
+        copy._textPos = [None for text_pos in self._textPos]
+        self.copyLabelsTo(copy)
+        copy.setupConnections()
+        copy.updateArrowHead()
+        return copy
 
     def controlPointPosAboutToChange(self, ctrl_pt, crnt_pos):
         self.saveTextPosition()
@@ -79,7 +92,11 @@ class GraphArrow(GfxObject, LabeledGfx):
         self._editTimer.stop()
         self._editTimer = None
             
-    def setup(self):
+    def setupConnections(self):
+        self._points[0].positionAboutToChange.connect(lambda pos: self.controlPointPosAboutToChange(self._points[0], pos))
+        self._points[-1].positionAboutToChange.connect(lambda pos: self.controlPointPosAboutToChange(self._points[-1], pos))
+        self._points[0].positionHasChanged.connect(lambda pos: self.controlPointPosHasChanged(self._points[0], pos))
+        self._points[-1].positionHasChanged.connect(lambda pos: self.controlPointPosHasChanged(self._points[-1], pos))            
         for point in self._points:
             point.setParentItem(self)
         self._contextMenu = self.buildDefaultContextMenu()
@@ -298,19 +315,24 @@ class GraphArrow(GfxObject, LabeledGfx):
             self.updateArrowHead()
             self.updateTextPosition()
                    
-    def saveTextPosition(self):
+    def saveTextPosition(self, k=None):
         line = self.line()
         u = line.p2() - line.p1()
         mag_u = mag2D(u)
         if mag_u != 0:
             u /= mag_u
         v = QPointF(-u.y(), u.x())
-        for k in range(len(self._labels)):
+        if k is not None:
             label = self._labels[k]
             a = label.pos() - line.p1()
-            a_proj_u = dot2D(a, u) 
-            a_proj_v = dot2D(a, v)
-            self._textPos[k] = (a_proj_u, a_proj_v, mag_u)
+            self._textPos[k] = (dot2D(a, u), dot2D(a, v), mag_u)
+        else:
+            for k in range(len(self._labels)):
+                label = self._labels[k]
+                a = label.pos() - line.p1()
+                a_proj_u = dot2D(a, u) 
+                a_proj_v = dot2D(a, v)
+                self._textPos[k] = (a_proj_u, a_proj_v, mag_u)
                 
     def updateTextPosition(self):
         line = self.line()
@@ -345,9 +367,10 @@ class GraphArrow(GfxObject, LabeledGfx):
         self._contextMenu = menu
         
     def addLabel(self, label):
+        k = self.labelCount()
         label = super().addLabel(label)
         if isinstance(label, TextItem):
-            label.onPositionChanged = self.saveTextPosition    
+            label.onPositionChanged = lambda: self.saveTextPosition(k)
         return label
         
     def mouseMoveEvent(self, event):
@@ -382,3 +405,5 @@ class GraphArrow(GfxObject, LabeledGfx):
                     point.setSelected(True)
         return super().itemChange(change, value)            
     
+    def updateGraph(self):
+        self.updatePosition()
