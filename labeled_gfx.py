@@ -128,3 +128,7 @@ class LabeledGfx:
             label.onTextChanged.append(slot)
         else:
             raise NotImplementedError
+        
+    def delete(self):
+        for label in self._labels:
+            label.delete()

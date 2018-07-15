@@ -13,17 +13,19 @@ from copy import deepcopy
 class GraphArrow(GfxObject, LabeledGfx):
     EditTime = 1500
     nameChanged = pyqtSignal(str)
+    bezierToggled = pyqtSignal(bool)
+    controlPointsPosChanged = pyqtSignal(list)    # list of points
     
     def __init__(self, new=True):
         super().__init__()
         super().__init__()
         if new:
+            self._to = None
+            self._from = None            
             self._points = [ControlPoint() for i in range(0, 2)]
             for point in self._points:
                 point.setPos(QPointF(0,0))
             self.setupConnections()
-            self._to = None
-            self._from = None
             self._pen = Pen(Qt.black, 1.5, Qt.SolidLine)
             self._textPos = []
         self._arrowHead = None            
@@ -78,6 +80,7 @@ class GraphArrow(GfxObject, LabeledGfx):
         self.updateTextPosition()
         self.updatePosition()
         self.update()
+        self.controlPointsPosChanged.emit([p.pos() for p in self._points])
         
     def pen(self):
         return self._pen
@@ -123,22 +126,7 @@ class GraphArrow(GfxObject, LabeledGfx):
             self._points[1].positionHasChanged.connect(lambda pos: self.controlPointPosHasChanged(self._points[1], pos))         
             self._points[2].positionHasChanged.connect(lambda pos: self.controlPointPosHasChanged(self._points[2], pos))
         self._contextMenu = self.buildDefaultContextMenu()
-            
-    def setFrom(self, fro):
-        if fro != self._from:
-            if self._from is not None:
-                self._from.detachArrow(self)
-            self._from = fro         
-            if fro is not None:
-                fro.attachArrow(self)
-            self.updatePosition()
-        
-    def fromNode(self):
-        return self._from
-    
-    def toNode(self):
-        return self._to
-    
+  
     def source(self):
         if self._from is None:
             return self.fromPoint()
@@ -160,6 +148,21 @@ class GraphArrow(GfxObject, LabeledGfx):
             if to is not None:
                 to.attachArrow(self)
             self.updatePosition()
+            
+    def setFrom(self, fro):
+        if fro != self._from:
+            if self._from is not None:
+                self._from.detachArrow(self)
+            self._from = fro         
+            if fro is not None:
+                fro.attachArrow(self)
+            self.updatePosition()
+        
+    def fromNode(self):
+        return self._from
+    
+    def toNode(self):
+        return self._to    
         
     def toPoint(self):
         return self._points[-1]
@@ -260,6 +263,7 @@ class GraphArrow(GfxObject, LabeledGfx):
             point.setParentItem(None)
             self.updatePosition()
         self.setLinePoints(self._points[0].pos(), self._points[-1].pos())
+        self.bezierToggled.emit(toggled)
     
     def arrowHeadSize(self):
         return 15
@@ -438,9 +442,20 @@ class GraphArrow(GfxObject, LabeledGfx):
     def updateGraph(self):
         self.updatePosition()
         
+    def setPointPositions(self, pos_list):
+        if isinstance(pos_list[0], ControlPoint):
+            pos_list = [p.pos() for p in pos_list]
+        for k in range(0, len(pos_list)):
+            self._points[k].setPos(pos_list[k])
+        
     #def setPos(self, pos):
         #center = self.pointCenter()
         #delta = pos - center
         #for point in self._points:
             #point.setPos(point.pos() + delta)
         #self.updatePosition()
+        
+    def delete(self):
+        self.setTo(None)
+        self.setFrom(None)
+        super().delete()

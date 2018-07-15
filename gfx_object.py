@@ -11,7 +11,9 @@ class GfxObject(QGraphicsObject):
     focusedIn = pyqtSignal()
     focusedOut = pyqtSignal()
     zoomedIn = pyqtSignal()
-    
+    positionChanged = pyqtSignal(QPointF)
+    positionChangedDelta = pyqtSignal(QPointF)
+    deleted = pyqtSignal()
     DefaultZoomThreshold = 3
     
     def __init__(self, new=True):
@@ -21,7 +23,7 @@ class GfxObject(QGraphicsObject):
             self._pen = Pen(Qt.NoPen)
             self._brush = SimpleBrush(Qt.NoBrush)
             self._locked = False
-            self._zoomThreshold = self.DefaultZoomThreshold
+        self._zoomThreshold = self.DefaultZoomThreshold
         self._zoom = 0
         self._commands = []
         self._uid = uuid4()
@@ -104,6 +106,7 @@ class GfxObject(QGraphicsObject):
         
     def itemChange(self, change, value):
         if change == self.ItemPositionChange:
+            self._lastPos = self.pos()
             if self.snapToGrid() and self.scene() and self.scene().gridEnabled():
                 if QApplication.mouseButtons() == Qt.LeftButton and self.scene():
                     grid_sizex = self.scene().gridSizeX()
@@ -115,6 +118,11 @@ class GfxObject(QGraphicsObject):
                     x = round(value.x() / grid_sizex) * grid_sizex
                     y = round(value.y() / grid_sizey) * grid_sizey
                     value = QPointF(x + ox, y + oy)
+            return value
+        elif change == self.ItemPositionHasChanged:
+            delta = value - self._lastPos
+            self.positionChanged.emit(value)
+            self.positionChangedDelta.emit(delta)
             return value
         else:
             return super().itemChange(change, value)
@@ -205,3 +213,11 @@ class GfxObject(QGraphicsObject):
                     return cmd
                 k -= 1
         return None
+    
+    def delete(self):
+        self.setParentItem(None)
+        if self.scene():
+            self.scene().removeItem(self)
+        for child in self.children():
+            child.delete()
+        self.deleted.emit()

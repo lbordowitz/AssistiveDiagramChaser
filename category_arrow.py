@@ -208,40 +208,37 @@ class CategoryArrow(GraphArrow):
         fun = self.labelText(0)
         return re.compile(fun + r'\((?P<arg>.+)\)')
     
-    def setCodomain(self, cod, undoable=False):
+    def setTo(self, cod, undoable=False):
         if cod is not self.codomain():
             if undoable:
-                getText = lambda arr, cod: "Set codomain of " + str(arr) + " to " + str(cod)
-                command = MethodCallCommand(getText(self, cod), self.setCodomain, [cod], self.setCodomain, [None], self.editor())
-                slot = lambda name: self.setCommandText(command, getText(self, cod))
+                getText = lambda: "Set codomain of " + str(self) + " to " + str(cod)
+                command = MethodCallCommand(getText(), self.setTo, [cod], self.setTo, [None], self.editor())
+                slot = lambda name: command.setText(getText())
                 self.nameChanged.connect(slot)
                 if cod is not None:
                     cod.nameChanged.connect(slot)
                 self.editor().pushCommand(command)
             else:
-                self.setTo(cod)
+                super().setTo(cod)
         
-    def setDomain(self, dom, undoable=False):
+    def setFrom(self, dom, undoable=False):
         if dom is not self.domain():
             if undoable:
-                getText = lambda arr, dom: "Set domain of " + str(arr) + " to " + str(dom)
-                command = MethodCallCommand(getText(self, dom), self.setDomain, [dom], self.setDomain, [None], self.editor())
-                slot = lambda name: self.setCommandText(command, getText(self, dom))
+                getText = lambda: "Set domain of " + str(self) + " to " + str(dom)
+                command = MethodCallCommand(getText(), self.setFrom, [dom], self.setFrom, [None], self.editor())
+                slot = lambda name: command.setText(getText())
                 self.nameChanged.connect(slot)
                 if dom is not None:
                     dom.nameChanged.connect(slot)
                 self.editor().pushCommand(command)
             else:
-                self.setFrom(dom)
+                super().setFrom(dom)
                 
     def domain(self):
         return self.fromNode()
     
     def codomain(self):
         return self.toNode()
-    
-    def setCommandText(self, command, text):
-        command.setText(text)
         
     def canConnectTo(self, item, at_start):
         if at_start:
@@ -254,3 +251,14 @@ class CategoryArrow(GraphArrow):
             return True
         return False
             
+    def codomain(self):
+        return self.toNode()
+    
+    def domain(self):
+        return self.fromNode()
+    
+    def setDomain(self, dom):
+        self.setFrom(dom)
+        
+    def setCodomain(self, cod):
+        self.setTo(cod)

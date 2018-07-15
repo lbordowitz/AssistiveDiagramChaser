@@ -1,4 +1,4 @@
-from PyQt5.QtWidgets import QUndoCommand
+from PyQt5.QtWidgets import QUndoCommand, QApplication
 from category_object import CategoryObject
 
 class Command(QUndoCommand):
@@ -27,6 +27,12 @@ class Command(QUndoCommand):
     
     def addSubcommand(self, command):
         self._subcommands.append(command)
+        
+    def setText(self, text):
+        super().setText(text)
+        fw = QApplication.focusWidget()
+        self.editor().undoView().setFocus()        
+        fw.setFocus()
         
 
 class MethodCallCommand(Command):

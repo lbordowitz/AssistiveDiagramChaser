@@ -36,14 +36,14 @@ class CategoryDiagramEditor(GraphEditor):
                 node.focusedIn.connect(lambda: self.nodeFocusedIn(node))
                 node.setZValue(-1.0)
                 #self.scene().placeItems(node, pos)
-                item.addObject(node)
+                item.addObject(node, undoable=True)
                 node.setPos(item.mapFromScene(pos))
                 self.scene().placeItems(node, add=False)
                 item = node
             elif isinstance(item, Category):
                 C = item
                 F = Functor()
-                F.setDomain(C)
+                F.setFrom(C)
                 F.setLabelText(0, "F")     
                 F.setEditor(self)
                 self.addArrow(F)
@@ -56,7 +56,7 @@ class CategoryDiagramEditor(GraphEditor):
                 arr.setFrom(item)
                 parent = item.parentItem()
                 if parent:
-                    parent.addMorphism(arr)
+                    parent.addMorphism(arr, undoable=True)
                     add = False
                     pos = parent.mapFromScene(pos)
                 else:
@@ -121,16 +121,16 @@ class CategoryDiagramEditor(GraphEditor):
                 if item:  # There is a node!
                     if arr.canConnectTo(item, is_start):
                         if is_start:
-                            arr.setDomain(item, undoable=True)
+                            arr.setFrom(item, undoable=True)
                         else:
-                            arr.setCodomain(item, undoable=True)
+                            arr.setTo(item, undoable=True)
                         break 
         else:
             # There is no sufficient item at pos
             if is_start:
-                arr.setDomain(None, undoable=True)
+                arr.setFrom(None, undoable=True)
             else:
-                arr.setCodomain(None, undoable=True)            
+                arr.setTo(None, undoable=True)            
             
     def buildSceneContextMenu(self, menu=None):
         if menu is None:
@@ -148,11 +148,4 @@ class CategoryDiagramEditor(GraphEditor):
             if item not in children:
                 filtered.append(item)
         for item in filtered:
-            if isinstance(item, CategoryObject):
-                self.removeNode(item)
-            elif isinstance(item, CategoryArrow):
-                self.detachArrow(item)
-            parent = item.parentItem()
-            if parent:
-                if isinstance(parent, Category):
-                    parent.removeObject(item)
+            item.delete()

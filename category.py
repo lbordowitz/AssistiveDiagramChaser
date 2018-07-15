@@ -36,6 +36,9 @@ class Category(CategoryObject):
     
     def objects(self):
         return self._objects
+    
+    def morphisms(self):
+        return self._morphisms
         
     def sceneEventFilter(self, watched, event):
         if watched.uid() in self._objects:
@@ -67,11 +70,11 @@ class Category(CategoryObject):
                     for g in Y.outgoingArrows():
                         gf = self.editor().ArrowType()
                         gf.setLabelText(0, g.labelText(0) + f.labelText(0))
-                        gf.setDomain(X)
-                        gf.setCodomain(g.codomain())
+                        gf.setFrom(X)
+                        gf.setTo(g.codomain())
                         self.editor().attachArrow(gf)
                         
-    def addMorphism(self, arr, undoable=False):
+    def addMorphism(self, arr, undoable=False, emit=True):
         if arr.uid() not in self._morphisms:
             if undoable:
                 self.editor().pushCommand(MethodCallCommand("Adding morphism " + str(arr) + " to category " + str(self),
@@ -82,8 +85,11 @@ class Category(CategoryObject):
                 self.scene().addItem(arr)
                 arr.setParentItem(self)
                 self._morphisms[arr.uid()] = arr
+                self.updateArrows()
+                if emit:
+                    self.updateFunctorImages()
         
-    def removeMorphism(self, arr):
+    def removeMorphism(self, arr, undoable=False, emit=True):
         if arr.uid() in self._morphisms:
             if undoable:
                 self.editor().pushCommand(MethodCallCommand("Removing morphism " + str(arr) + " from category " + str(self),
@@ -93,24 +99,33 @@ class Category(CategoryObject):
                 arr.setEditor(None)
                 arr.setParentItem(None)
                 del self._morphisms[arr.uid()]
+                self.updateArrowsAndClearResidual()
+                if emit:
+                    self.updateFunctorImages()
                 
-    def addObject(self, obj, undoable=False):
+    def addObject(self, obj, undoable=False, emit=True):
         if obj.uid() not in self._objects:
             if undoable:
-                self.editor().pushCommand(
-                    MethodCallCommand("Adding object " + str(obj) + " to category " + str(self),
-                                      self.addObject, [obj], self.removeObject, [obj], self.editor()))
+                getText = lambda: "Adding object " + str(obj) + " to category " + str(self)
+                command = MethodCallCommand(getText(), self.addObject, [obj], self.removeObject, [obj], self.editor())
+                slot = lambda name: command.setText(getText())
+                self.nameChanged.connect(slot) 
+                obj.nameChanged.connect(slot)
+                self.editor().pushCommand(command)
             else:
                 obj.setParentItem(self)
                 self._objects[obj.uid()] = obj
                 obj.installSceneEventFilter(self)
-                self.update()
-                        
-    def removeObject(self, obj, undoable=False):
+                self.updateArrows()
+                if emit:    # All things propagating to other nodes go here
+                    self.updateFunctorImages()
+                                        
+    def removeObject(self, obj, undoable=False, emit=True):
         if obj.uid() in self._objects:
             if undoable:
-                self.editor().pushCommand(MethodCallCommand("Removing object " + str(obj) + " from category " + str(self),
-                                                     self.removeObject, [obj], self.addObject, [obj], self.editor()))
+                getText = lambda: "Removing object " + str(obj) + " from category " + str(self)
+                self.editor().pushCommand(getText(), self.removeObject, [obj], self.addObject, [obj], self.editor())
+                slot = lambda name: command.setText(getText())
             else:
                 obj.setParentItem(None)
                 if self.scene():
@@ -118,6 +133,9 @@ class Category(CategoryObject):
                 if obj.uid() in self._objects:
                     del self._objects[obj.uid()]
                 obj.removeSceneEventFilter(self)
+                self.updateArrowsAndClearResidual()
+                if emit:
+                    self.updateFunctorImages()
         
     def attachArrow(self, fun):
         super().attachArrow(fun)
@@ -131,3 +149,8 @@ class Category(CategoryObject):
            isinstance(item, Category):
             return True
         return False    
+    
+    def updateFunctorImages(self):
+        for F in self.outgoingArrows():
+            F.updateImage()
+            

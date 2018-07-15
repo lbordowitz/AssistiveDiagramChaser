@@ -63,6 +63,8 @@ class GraphNode(GfxObject, LabeledGfx):
         copy._insetPadding = self._insetPadding
         copy._cornerRadius = self._cornerRadius
         copy._arrows = deepcopy(self._arrows, memo)
+        #for arr in copy._arrows:
+            #assert(arr.toNode() is self or arr.fromNode() is self)
         copy._boundScale = tuple(self._boundScale)
         copy._brush = deepcopy(self._brush, memo)
         copy.setupConnections()
@@ -136,28 +138,29 @@ class GraphNode(GfxObject, LabeledGfx):
         return self._defaultRect
         
     def paint(self, painter, option, widget):
-        if self.isSelected():
-            paintSelectionShape(painter, self)
-        painter.setRenderHints(self.renderHints())
-        painter.setBrush(self.brush())
-        if self._hover:
-            painter.setPen(self.pen())
-        else:
-            painter.setPen(QPen(Qt.NoPen))
-        if self._shape == self.RoundedRect:
-            painter.drawRoundedRect(self.boundingRect(), self.cornerRadius(), self.cornerRadius())
-        elif self._shape == self.Circle:
-            rect = self.boundingRect()
-            if rect.width() > rect.height():
-                rect.setX(rect.x() - (rect.height() - rect.width()) / 2)
-                rect.setWidth(rect.height())
-            elif rect.height() > rect.width():
-                rect.setY(rect.y() - (rect.width() - rect.height()) / 2)
-                rect.setHeight(rect.width())
-            pen_w = self.pen().width()
-            rect.adjust(pen_w, pen_w, -pen_w, -pen_w)
-            painter.drawEllipse(rect)
-        painter.setPen(QPen(Qt.red, 2.0))
+        if self.scene():
+            if self.isSelected():
+                paintSelectionShape(painter, self)
+            painter.setRenderHints(self.renderHints())
+            painter.setBrush(self.brush())
+            if self._hover:
+                painter.setPen(self.pen())
+            else:
+                painter.setPen(QPen(Qt.NoPen))
+            if self._shape == self.RoundedRect:
+                painter.drawRoundedRect(self.boundingRect(), self.cornerRadius(), self.cornerRadius())
+            elif self._shape == self.Circle:
+                rect = self.boundingRect()
+                if rect.width() > rect.height():
+                    rect.setX(rect.x() - (rect.height() - rect.width()) / 2)
+                    rect.setWidth(rect.height())
+                elif rect.height() > rect.width():
+                    rect.setY(rect.y() - (rect.width() - rect.height()) / 2)
+                    rect.setHeight(rect.width())
+                pen_w = self.pen().width()
+                rect.adjust(pen_w, pen_w, -pen_w, -pen_w)
+                painter.drawEllipse(rect)
+            painter.setPen(QPen(Qt.red, 2.0))
 
     def setRenderHints(self, hints):
         self._renderHints = hints
@@ -260,3 +263,10 @@ class GraphNode(GfxObject, LabeledGfx):
     def updateGraph(self):
         self.updateArrows()
         
+    def delete(self):
+        for arr in self.arrows():
+            if arr.toNode() is self:
+                arr.setTo(None)
+            else:
+                arr.setFrom(None)
+        super().delete()
