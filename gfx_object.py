@@ -5,6 +5,7 @@ from PyQt5.QtCore import Qt, QPointF, pyqtSignal
 from geom_tools import paintSelectionShape, rectToPoly
 from qt_tools import Pen, SimpleBrush, unpickleGfxItemFlags
 from copy import deepcopy
+from uuid import uuid4
 
 class GfxObject(QGraphicsObject):
     focusedIn = pyqtSignal()
@@ -15,19 +16,24 @@ class GfxObject(QGraphicsObject):
     
     def __init__(self, new=True):
         super().__init__()
+        self._snapToGrid = True
         if new:
             self._pen = Pen(Qt.NoPen)
             self._brush = SimpleBrush(Qt.NoBrush)
             self._locked = False
-            self._snapToGrid = True
             self._zoomThreshold = self.DefaultZoomThreshold
         self._zoom = 0
+        self._commands = []
+        self._uid = uuid4()
+        
+    def uid(self):
+        return self._uid
         
     def __setstate__(self, data):
+        self.__init__(new=False)
         self.setParentItem(data['parent'])
         self._pen = data['pen']
         self._brush = data['brush']
-        self._undoStack = data['undo stack']
         self.setFlags(unpickleGfxItemFlags(data['flags']))
         self.setPos(data['pos'])
         self._locked = data['locked']
@@ -37,7 +43,6 @@ class GfxObject(QGraphicsObject):
             'parent' : self.parentItem(),
             'pen' : self._pen,
             'brush' : self._brush,
-            'undo stack' : self._undoStack,
             'flags' : int(self.flags()),
             'pos' : self.pos(),
             'locked' : self._locked
@@ -46,7 +51,7 @@ class GfxObject(QGraphicsObject):
     def __deepcopy__(self, memo):
         copy = type(self)(new=False)
         memo[id(self)] = copy
-        copy.setParentItem(deepcopy(self.parentItem(), memo))
+        copy.setParentItem(self.parentItem())
         copy._pen = deepcopy(self._pen, memo)
         copy._brush = deepcopy(self._brush, memo)
         copy._undoStack = None          # Can't copy an undo stack since it holds references to this item and will change /it/
@@ -60,14 +65,11 @@ class GfxObject(QGraphicsObject):
     
     def setLocked(self, locked):
         self._locked = locked
-
-    def setUndoStack(self, stack):
-        self._undoStack = stack
         
     def setPen(self, pen):
         self._pen = pen
         self.update()
-    
+        
     def pen(self):
         return self._pen
     
@@ -92,7 +94,6 @@ class GfxObject(QGraphicsObject):
             super().mouseMoveEvent(event)
         
     def mousePressEvent(self, event):
-        self._totalDelta = QPointF()
         super().mousePressEvent(event)
         
     def mouseReleaseEvent(self, event):
@@ -100,9 +101,10 @@ class GfxObject(QGraphicsObject):
             #if self._undoStack:
                 #self._undoStack.push(SetterUndoCommand(self, 'setPos', event.pos() - self._totalDelta, event.pos()))
         super().mouseReleaseEvent(event)
-
+        
     def itemChange(self, change, value):
-        if self.snapToGrid() and change == self.ItemPositionChange and self.scene() and self.scene().gridEnabled():
+        if change == self.ItemPositionChange:
+            if self.snapToGrid() and self.scene() and self.scene().gridEnabled():
                 if QApplication.mouseButtons() == Qt.LeftButton and self.scene():
                     grid_sizex = self.scene().gridSizeX()
                     grid_sizey = self.scene().gridSizeY()
@@ -112,13 +114,8 @@ class GfxObject(QGraphicsObject):
                     
                     x = round(value.x() / grid_sizex) * grid_sizex
                     y = round(value.y() / grid_sizey) * grid_sizey
-                    return QPointF(x + ox, y + oy)
-                else:
-                    return value
-        #elif change == self.ItemSelectedChange:
-            #if hasattr(self.scene(), 'rightMousePressed') and self.scene().rightMousePressed():
-                #return self.isSelected()
-            #return value
+                    value = QPointF(x + ox, y + oy)
+            return value
         else:
             return super().itemChange(change, value)
     
@@ -134,7 +131,9 @@ class GfxObject(QGraphicsObject):
         return self._snapToGrid
     
     def setSnapToGrid(self, enabled):
+        prevstate = self.__getstate__()
         self._snapToGrid = enabled
+        self.changed.emit(prevstate)
         
     def buildDefaultContextMenu(self, menu):
         raise NotImplementedError
@@ -185,3 +184,24 @@ class GfxObject(QGraphicsObject):
     def closestBoundaryPos(self, pos):
         raise NotImplementedError
     
+    def associateCommand(self, cmd):
+        self._commands.append(cmd)
+        
+    def clearCommands(self):
+        self._commands.clear()
+        
+    def commandsAssociated(self):
+        return self._commands
+    
+    def disassociateCommand(self, cmd):
+        self._commands.remove(cmd)
+        
+    def mostRecentCommandOfType(self, type):
+        if self._commands:
+            k = len(self._commands) - 1
+            while k >= 0:
+                cmd = self._commands[k]
+                if isinstance(cmd, type):
+                    return cmd
+                k -= 1
+        return None

@@ -1,4 +1,4 @@
-from PyQt5.QtWidgets import QGraphicsView
+from PyQt5.QtWidgets import QGraphicsView, QUndoStack
 from PyQt5.QtCore import Qt, pyqtSignal
 from copy import deepcopy
 
@@ -6,7 +6,7 @@ from copy import deepcopy
 class Editor(QGraphicsView):
     focused = pyqtSignal()
     
-    def __init__(self, new=True):
+    def __init__(self, window, new=True):
         super().__init__()
         if new:
             self._editable = True
@@ -14,9 +14,18 @@ class Editor(QGraphicsView):
             self._zoomFactor = (1.1, 1.1)
             self._zoomLimit = 20
             self._scale = (1.0, 1.0)
+        self._window = window
         self.setDragMode(QGraphicsView.RubberBandDrag)
         self.setFocusPolicy(Qt.StrongFocus)
         self.setMouseTracking(True)
+        self._undoStack = QUndoStack()
+        self._undoView = None
+        
+    def window(self):
+        return self._window
+    
+    def setUndoView(self, view):
+        self._undoView = view
         
     def setEditable(self, enable):
         self._editable = enable
@@ -86,3 +95,18 @@ class Editor(QGraphicsView):
     def focusInEvent(self, event):
         self.focused.emit()
         super().focusInEvent(event)    
+        
+    def undo(self):
+        self._undoStack.undo()
+        
+    def redo(self):
+        self._undoStack.redo()
+        
+    def pushCommand(self, command):
+        self._undoStack.push(command)
+        
+    def undoView(self):
+        return self._undoView
+    
+    def undoStack(self):
+        return self._undoStack

@@ -1,6 +1,6 @@
 from graph_arrow import GraphArrow
 from text_item import TextItem
-from PyQt5.QtCore import QPointF, Qt, QLineF, QRectF
+from PyQt5.QtCore import QPointF, Qt, QLineF, QRectF, QEvent
 from PyQt5.QtWidgets import QMenu, QActionGroup
 from PyQt5.QtGui import QPainter, QBrush, QPainterPath, QPainterPathStroker
 from qt_tools import Pen
@@ -9,19 +9,20 @@ from math import pi
 from category import Category
 from copy import deepcopy
 import re
+from commands import MethodCallCommand
+import category_object
 
 class CategoryArrow(GraphArrow):
     def __init__(self, new=True):
-        super().__init__()
+        super().__init__(new)
         if new:
             label = self.addLabel(TextItem("f"))
-        self._exists = False
-        self._epi = False
-        self._mono = False
-        self._isom = False
-        self._editor = None
+            self._exists = False
+            self._epi = False
+            self._mono = False
+            self._isom = False
+            self._editor = None
         self._graphAlgoVisited = False
-        self._functor = False
         
     def __deepcopy__(self, memo):
         copy = deepcopy(super(), memo)
@@ -33,9 +34,6 @@ class CategoryArrow(GraphArrow):
         copy._editor = self._editor
         return copy
     
-    def isFunctor(self):
-        return isinstance(self.toNode(), Category) and isinstance(self.fromNode(), Category)
-        
     def editor(self):
         return self._editor
     
@@ -122,16 +120,17 @@ class CategoryArrow(GraphArrow):
         return self._type
     
     def paint(self, painter, option, widget):
-        if self.isSelected():
-            paintSelectionShape(painter, self)
-        painter.setRenderHints(QPainter.HighQualityAntialiasing | QPainter.Antialiasing)
-        painter.setPen(self.pen())
-        painter.setBrush(QBrush(Qt.NoBrush))
-        if self._epi:
-            self._paintEpiHead(painter)
-        else:
-            painter.drawPath(self._arrowHead) 
-        painter.drawPath(self.tailPath())
+        if self.scene():
+            if self.isSelected():
+                paintSelectionShape(painter, self)
+            painter.setRenderHints(QPainter.HighQualityAntialiasing | QPainter.Antialiasing)
+            painter.setPen(self.pen())
+            painter.setBrush(QBrush(Qt.NoBrush))
+            if self._epi:
+                self._paintEpiHead(painter)
+            else:
+                painter.drawPath(self._arrowHead) 
+            painter.drawPath(self.tailPath())
             
     def tailPath(self):
         path = QPainterPath()
@@ -143,7 +142,9 @@ class CategoryArrow(GraphArrow):
         if abs(mag_u) != 0:
             if self._firstTimeNonzero:
                 self._firstTimeNonzero = False
-                self.label(-1).setPos(self.pointCenter())
+                label = self.label(-1)
+                if label:
+                    label.setPos(self.pointCenter())
             u /= mag_u
             v /= mag_u
         r = self.arrowHeadSize() 
@@ -193,46 +194,6 @@ class CategoryArrow(GraphArrow):
     
     def arrowHeadSize(self):
         return 7
-    
-    def takeFunctorImage(self):
-        C = self.fromNode()
-        D = self.toNode()
-        if self.isFunctor():
-            obj_list = C.deepcopyGraph()
-            fun = self.labelText(0)
-            for obj in obj_list:
-                obj.clearGraphAlgoVisitedFlag()                
-            for obj in obj_list:
-                obj.setLabelText(0, fun + "(" + obj.labelText(0) + ")")
-                self.editor().addObjectToCategory(obj, D) 
-                for arr in obj.arrows():
-                    if not arr.graphAlgoVisited():
-                        arr.setGraphAlgoVisitedFlag()
-                        arr.setLabelText(0, fun + "(" + arr.labelText(0) + ")")
-            D.updateArrows()
-                            
-    def undoTakeFunctorImage(self):
-        C = self.fromNode()
-        D = self.toNode()
-        if isinstance(C, Category) and isinstance(D, Category):
-            obj_list = D.objects()
-            for obj in obj_list:
-                obj.clearGraphAlgoVisitedFlag()
-            delete_list = []
-            for k in range(0, len(obj_list)):
-                obj = obj_list[k]
-                label = obj.labelText(0)
-                match = self.functorCompositionRegex().match(label)
-                if match:
-                    delete_list.append(obj)
-                for arr in obj.arrows():
-                    if not arr.graphAlgoVisited():
-                        arr.setGraphAlgoVisitedFlag()
-                        label = arr.labelText(0)
-                        match = self.functorCompositionRegex().match(label)
-                        if match:
-                            delete_list.append(arr)
-            self.editor().deleteItems(delete_list)
             
     def graphAlgoVisited(self):
         return self._graphAlgoVisited
@@ -246,3 +207,50 @@ class CategoryArrow(GraphArrow):
     def functorCompositionRegex(self):
         fun = self.labelText(0)
         return re.compile(fun + r'\((?P<arg>.+)\)')
+    
+    def setCodomain(self, cod, undoable=False):
+        if cod is not self.codomain():
+            if undoable:
+                getText = lambda arr, cod: "Set codomain of " + str(arr) + " to " + str(cod)
+                command = MethodCallCommand(getText(self, cod), self.setCodomain, [cod], self.setCodomain, [None], self.editor())
+                slot = lambda name: self.setCommandText(command, getText(self, cod))
+                self.nameChanged.connect(slot)
+                if cod is not None:
+                    cod.nameChanged.connect(slot)
+                self.editor().pushCommand(command)
+            else:
+                self.setTo(cod)
+        
+    def setDomain(self, dom, undoable=False):
+        if dom is not self.domain():
+            if undoable:
+                getText = lambda arr, dom: "Set domain of " + str(arr) + " to " + str(dom)
+                command = MethodCallCommand(getText(self, dom), self.setDomain, [dom], self.setDomain, [None], self.editor())
+                slot = lambda name: self.setCommandText(command, getText(self, dom))
+                self.nameChanged.connect(slot)
+                if dom is not None:
+                    dom.nameChanged.connect(slot)
+                self.editor().pushCommand(command)
+            else:
+                self.setFrom(dom)
+                
+    def domain(self):
+        return self.fromNode()
+    
+    def codomain(self):
+        return self.toNode()
+    
+    def setCommandText(self, command, text):
+        command.setText(text)
+        
+    def canConnectTo(self, item, at_start):
+        if at_start:
+            other_end = self.codomain()
+        else:
+            other_end = self.domain()
+        if isinstance(other_end, category_object.CategoryObject) and \
+           other_end.parentItem() is item.parentItem() and \
+           isinstance(item, category_object.CategoryObject):
+            return True
+        return False
+            

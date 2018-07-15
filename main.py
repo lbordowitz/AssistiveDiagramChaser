@@ -12,7 +12,7 @@ from main_window import MainWindow
 if __name__ == '__main__':
     app = QApplication([])
 
-    main_win = MainWindow()
+    main_win = MainWindow(app)
     main_win.show()
     
     sys.exit(app.exec_())

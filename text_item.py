@@ -3,11 +3,12 @@ from PyQt5.QtCore import Qt, QPointF, pyqtSignal, QEvent, QRectF
 from PyQt5.QtGui import QColor, QTextCursor, QPainter, QFontMetrics
 from qt_tools import PseudoSignal, Pen, unpickleGfxItemFlags
 from copy import deepcopy
+from uuid import uuid4
 
 class TextItem(QGraphicsTextItem):
     def __init__(self, text=None, new=True):
         super().__init__(text)
-        self.textChangedHandler = None
+        self.onTextChanged = []
         self.setFlags(self.ItemIsMovable | self.ItemIsFocusable | self.ItemIsSelectable | self.ItemSendsGeometryChanges)
         self.mouseDoubleClickHandler = lambda event: self.setTextInteraction(True, select_all=True)
         self.setTextInteractionFlags(Qt.NoTextInteraction)
@@ -16,6 +17,10 @@ class TextItem(QGraphicsTextItem):
         self.setTextInteraction(False)
         self.pressedEventHandler = None
         self.onPositionChanged = None
+        self._uid = uuid4()
+        
+    def uid(self):
+        return self._uid
         
     def __setstate__(self, data):
         self.__init__(data['text'])
@@ -49,9 +54,10 @@ class TextItem(QGraphicsTextItem):
     def keyPressEvent(self, event):
         super().keyPressEvent(event)
         text = self.toPlainText()
-        if self.textChangedHandler:
-            self.textChangedHandler(text)
-             
+        if self.onTextChanged:
+            for slot in self.onTextChanged:
+                slot(text)
+                
     def focusOutEvent(self, event):
         self.setTextInteraction(False)
         super().focusOutEvent(event)            
@@ -59,8 +65,9 @@ class TextItem(QGraphicsTextItem):
     def setPlainText(self, text):
         if self.toPlainText() != text:
             super().setPlainText(text)
-            if self.textChangedHandler:
-                self.textChangedHandler(text)
+            if self.onTextChanged:
+                for slot in self.onTextChanged:
+                    slot(text)
                       
     def setTextInteraction(self, state, select_all=True):
         text = self.toPlainText()

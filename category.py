@@ -5,19 +5,18 @@ from PyQt5.QtGui import QColor
 from gfx_object import GfxObject
 from copy import deepcopy
 from qt_tools import SimpleBrush
+from commands import MethodCallCommand
 
 class Category(CategoryObject):
-    subitemAdded = pyqtSignal(GfxObject)
-    subitemRemoved = pyqtSignal(GfxObject)
-    
     def __init__(self, new=True):
-        self._objects = []
-        super().__init__()
+        self._objects = {}
+        self._morphisms = {}
+        super().__init__(new)
         self._editing = False
-        self._functorImages = {}
         if new:
-            self.setBrush(SimpleBrush(QColor(0,255,100,50)))   # Semi-transparent
+            self.setBrush(SimpleBrush(QColor(0,100,255,200)))   # Semi-transparent
             self.setLabelText(0, "C")
+            self._insetPadding = 3 * self._insetPadding
                 
     def paint(self, painter, option, widget):
         if self.isSelected() and self.scene():
@@ -29,7 +28,7 @@ class Category(CategoryObject):
         painter.drawRoundedRect(self.boundingRect(), r, r)
         
     def boundingRect(self):
-        rect_list = [child.boundingRect().translated(child.pos()) for child in self.objects()]
+        rect_list = [child.boundingRect().translated(child.pos()) for child in self.objects().values()]
         if rect_list:
             w = self._insetPadding
             return minBoundingRect(rect_list).adjusted(-w, -w, w, w)
@@ -37,24 +36,9 @@ class Category(CategoryObject):
     
     def objects(self):
         return self._objects
-    
-    def addObject(self, item):
-        item.setParentItem(self)
-        self._objects.append(item)
-        item.installSceneEventFilter(self)
-        self.update()
-        self.subitemAdded.emit(item)
-        
-    def removeObject(self, item):
-        item.setParentItem(None)
-        if self.scene():
-            self.scene().removeItem(item)
-        self._objects.remove(item)
-        item.removeSceneEventFilter(self)
-        self.subitemRemoved.emit(item)
         
     def sceneEventFilter(self, watched, event):
-        if watched in self._objects:
+        if watched.uid() in self._objects:
             if event.type() == QEvent.GraphicsSceneMouseMove:
                 self.updateArrowsAndClearResidual()
         return False
@@ -67,26 +51,83 @@ class Category(CategoryObject):
         
     def updateArrows(self):
         super().updateArrows()
-        for child in self._objects:
+        for child in self._objects.values():
             child.updateGraph() 
             
-    def addArrow(self, arr):
-        super().addArrow(arr)
-        arr.takeFunctorImage()
-        
-    def removeArrow(self, arr):
-        arr.undoTakeFunctorImage()
-        super().removeArrow(arr)
-        
     def clearGraphAlgoVisitedFlags(self):
-        for obj in self._objects:
+        for obj in self._objects.values():
             obj.clearGraphAlgoVisited()
             
-    # Returns list of objects only, arrows come referenced by objects
-    def deepcopyGraph(self):
-        memo = {}
-        memo[id(self)] = self
-        obj_list = []
+    def composeArrows(self):
         for obj in self._objects:
-            obj_list.append(deepcopy(obj, memo))
-        return obj_list
+            X = obj
+            for f in obj.outgoingArrows():
+                Y = f.toNode()
+                if Y:
+                    for g in Y.outgoingArrows():
+                        gf = self.editor().ArrowType()
+                        gf.setLabelText(0, g.labelText(0) + f.labelText(0))
+                        gf.setDomain(X)
+                        gf.setCodomain(g.codomain())
+                        self.editor().attachArrow(gf)
+                        
+    def addMorphism(self, arr, undoable=False):
+        if arr.uid() not in self._morphisms:
+            if undoable:
+                self.editor().pushCommand(MethodCallCommand("Adding morphism " + str(arr) + " to category " + str(self),
+                                                     self.addMorphism, [arr], self.removeMorphism, [arr], self.editor()))
+            else:
+                self.editor().setupArrowConnections(arr)
+                arr.setEditor(self.editor())
+                self.scene().addItem(arr)
+                arr.setParentItem(self)
+                self._morphisms[arr.uid()] = arr
+        
+    def removeMorphism(self, arr):
+        if arr.uid() in self._morphisms:
+            if undoable:
+                self.editor().pushCommand(MethodCallCommand("Removing morphism " + str(arr) + " from category " + str(self),
+                                                     self.removeMorphism, [arr], self.addMorphism, [arr], self.editor()))
+            else:
+                self.scene().removeItem(arr)
+                arr.setEditor(None)
+                arr.setParentItem(None)
+                del self._morphisms[arr.uid()]
+                
+    def addObject(self, obj, undoable=False):
+        if obj.uid() not in self._objects:
+            if undoable:
+                self.editor().pushCommand(
+                    MethodCallCommand("Adding object " + str(obj) + " to category " + str(self),
+                                      self.addObject, [obj], self.removeObject, [obj], self.editor()))
+            else:
+                obj.setParentItem(self)
+                self._objects[obj.uid()] = obj
+                obj.installSceneEventFilter(self)
+                self.update()
+                        
+    def removeObject(self, obj, undoable=False):
+        if obj.uid() in self._objects:
+            if undoable:
+                self.editor().pushCommand(MethodCallCommand("Removing object " + str(obj) + " from category " + str(self),
+                                                     self.removeObject, [obj], self.addObject, [obj], self.editor()))
+            else:
+                obj.setParentItem(None)
+                if self.scene():
+                    self.scene().removeItem(obj)
+                if obj.uid() in self._objects:
+                    del self._objects[obj.uid()]
+                obj.removeSceneEventFilter(self)
+        
+    def attachArrow(self, fun):
+        super().attachArrow(fun)
+        
+    def canConnectTo(self, item, at_start):
+        if at_start:
+            other_end = self.codomain()
+        else:
+            other_end = self.domain()
+        if isinstance(other_end, Category) and other_end.parentItem() is item.parentItem() and \
+           isinstance(item, Category):
+            return True
+        return False    

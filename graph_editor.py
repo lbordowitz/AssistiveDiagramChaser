@@ -14,8 +14,8 @@ class GraphEditor(Editor):
     ZoomScreenSizeFraction = 0.7
     zoomInRequest = pyqtSignal(str)
     
-    def __init__(self, new=True):
-        super().__init__(new)
+    def __init__(self, window, new=True):
+        super().__init__(window, new)
         if new:
             self._nodes = []
             self._arrows = []
@@ -59,6 +59,7 @@ class GraphEditor(Editor):
     def addNode(self, node):
         self._nodes.append(node)
         self.scene().addItem(node)
+        self.setupNodeConnections(node)
     
     def removeNode(self, node):
         if node in self._nodes:
@@ -70,7 +71,7 @@ class GraphEditor(Editor):
                     arr.setFrom(None)
             self.scene().removeItem(node)
         
-    def removeArrow(self, arr):
+    def detachArrow(self, arr):
         if arr in self._arrows:
             self._arrows.remove(arr)
             self.scene().removeItem(arr)
@@ -133,18 +134,26 @@ class GraphEditor(Editor):
         super().focusInEvent(event)    
         
     def addArrow(self, arr, scene=True):
-        #arr.zoomedIn.connect(lambda: self.arrowZoomedIn(arr))
-        arr.focusedIn.connect(lambda: self.arrowFocusedIn(arr))
-        ctrl_pts = arr.controlPoints()
-        ctrl_pts[0].mouseDragBegan.connect(lambda pos: self.arrowStartAboutToChange(arr, pos))
-        ctrl_pts[-1].mouseDragBegan.connect(lambda pos: self.arrowEndAboutToChange(arr, pos))
-        ctrl_pts[0].mouseDragEnded.connect(lambda pos: self.arrowStartHasChanged(arr, pos))
-        ctrl_pts[-1].mouseDragEnded.connect(lambda pos: self.arrowEndHasChanged(arr, pos))        
-        arr.setContextMenu(self.buildArrowContextMenu(arr))
         self._arrows.append(arr)
         if scene:
             self.scene().addItem(arr)
+        self.setupArrowConnections(arr)
             
+    def setupArrowConnections(self, arr):
+        #arr.zoomedIn.connect(lambda: self.arrowZoomedIn(arr))
+        arr.focusedIn.connect(lambda: self.arrowFocusedIn(arr))
+        ctrl_pts = arr.controlPoints()
+        ctrl_pts[0].mouseDragBegan.connect(lambda pos: self.arrowExtremityAboutToChange(arr, pos, is_start=True))
+        ctrl_pts[-1].mouseDragBegan.connect(lambda pos: self.arrowExtremityAboutToChange(arr, pos, is_start=False))
+        ctrl_pts[0].mouseDragEnded.connect(lambda pos: self.arrowExtremityHasChanged(arr, pos, is_start=True))
+        ctrl_pts[-1].mouseDragEnded.connect(lambda pos: self.arrowExtremityHasChanged(arr, pos, is_start=False))        
+        arr.setContextMenu(self.buildArrowContextMenu(arr))
+        #arr.changed.connect(lambda prevstate: self.itemStateChanged(arr, prevstate))
+    
+    def setupNodeConnections(self, node):
+        #node.changed.connect(lambda prevstate: self.itemStateChanged(node, prevstate))
+        pass
+        
     def placeItem(self, pos):
         item = self.scene().itemAt(pos, QTransform())
         if item:
@@ -163,27 +172,27 @@ class GraphEditor(Editor):
         self.scene().placeItems(node, pos)
         return node
     
-    def arrowStartAboutToChange(self, arr, pos):
-        arr.setFrom(None)
+    def arrowExtremityAboutToChange(self, arr, pos, is_start=False):
+        if is_start:
+            if arr.fromNode():
+                arr.fromNode().updateArrowsAndClearResidual()
+            arr.setFrom(None)
+        else:
+            if arr.toNode():
+                arr.toNode().updateArrowsAndClearResidual()
+            arr.setTo(None)
     
-    def arrowStartHasChanged(self, arr, pos):
+    def arrowExtremityHasChanged(self, arr, pos, is_start=False):
         items = self.scene().items(pos)
         for item in items:
             item = firstParentGfxItemOfType(item, self.NodeType)
             if item:
-                arr.setFrom(item)
-                break
-                
-    def arrowEndAboutToChange(self, arr, pos):
-        arr.setTo(None)
-                    
-    def arrowEndHasChanged(self, arr, pos):
-        items = self.scene().items(pos)
-        for item in items:
-            item = firstParentGfxItemOfType(item, self.NodeType)
-            if item:
-                arr.setTo(item)
-                break
+                if is_start:
+                    arr.setFrom(item)
+                else:
+                    arr.setTo(item)
+                self.scene().clearSelection()
+                break    
     
     def setCodeEditorTo(self, editor):
         raise NotImplementedError
@@ -236,3 +245,6 @@ class GraphEditor(Editor):
                 self.placeItem(pos)
         else:
             self.placeItem(pos)
+        
+        
+            

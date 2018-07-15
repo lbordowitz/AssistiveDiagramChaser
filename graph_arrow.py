@@ -12,6 +12,7 @@ from copy import deepcopy
 
 class GraphArrow(GfxObject, LabeledGfx):
     EditTime = 1500
+    nameChanged = pyqtSignal(str)
     
     def __init__(self, new=True):
         super().__init__()
@@ -36,8 +37,27 @@ class GraphArrow(GfxObject, LabeledGfx):
         self._updatingPos = False
         self._snapToGrid = False
         
+    def __setstate__(self, data):
+        super().__setstate__(data)
+        super().__setstate__(data)
+        self._points = data["points"]
+        self._to = data["to"]
+        self._from = data["from"]
+        self._textPos = data["text pos"]
+        self.updatePosition()
+        self.update()
+        
+    def __getstate__(self):
+        data = super().__getstate__()
+        data = {**data, **super().__getstate__()}
+        data["points"] = self._points
+        data["to"] = self._to
+        data["from"] = self._from
+        data["text pos"] = self._textPos
+        return data
+        
     def __deepcopy__(self, memo):
-        copy = type(self)(new=False)
+        copy = deepcopy(super(), memo)
         memo[id(self)] = copy
         copy._points = deepcopy(self._points, memo)
         for point in copy._points:
@@ -99,16 +119,19 @@ class GraphArrow(GfxObject, LabeledGfx):
         self._points[-1].positionHasChanged.connect(lambda pos: self.controlPointPosHasChanged(self._points[-1], pos))            
         for point in self._points:
             point.setParentItem(self)
+        if len(self._points) == 4:
+            self._points[1].positionHasChanged.connect(lambda pos: self.controlPointPosHasChanged(self._points[1], pos))         
+            self._points[2].positionHasChanged.connect(lambda pos: self.controlPointPosHasChanged(self._points[2], pos))
         self._contextMenu = self.buildDefaultContextMenu()
             
     def setFrom(self, fro):
         if fro != self._from:
             if self._from is not None:
-                self._from.removeArrow(self)
+                self._from.detachArrow(self)
             self._from = fro         
             if fro is not None:
-                fro.addArrow(self)
-        self.updatePosition()
+                fro.attachArrow(self)
+            self.updatePosition()
         
     def fromNode(self):
         return self._from
@@ -132,11 +155,11 @@ class GraphArrow(GfxObject, LabeledGfx):
     def setTo(self, to):
         if to != self._to:
             if self._to is not None:
-                self._to.removeArrow(self)
+                self._to.detachArrow(self)
             self._to = to
             if to is not None:
-                to.addArrow(self)
-        self.updatePosition()
+                to.attachArrow(self)
+            self.updatePosition()
         
     def toPoint(self):
         return self._points[-1]
@@ -170,7 +193,7 @@ class GraphArrow(GfxObject, LabeledGfx):
         self._points[0].setPos(line.p1())
         self._points[-1].setPos(line.p2())
         self.updateArrowHead()
-        self.update()      
+        self.update()
         
     def updateArrowHead(self):
         if not self.isBezier():
@@ -403,7 +426,21 @@ class GraphArrow(GfxObject, LabeledGfx):
                 for point in self._points:
                     point.setVisible(True)
                     point.setSelected(True)
+        elif change == self.ItemPositionChange:
+            center = self.pointCenter()
+            delta = value - center
+            for point in self._points:
+                point.setPos(point.pos() + delta)
+            value = QPointF()
+            return super().itemChange(change, value)
         return super().itemChange(change, value)            
     
     def updateGraph(self):
         self.updatePosition()
+        
+    #def setPos(self, pos):
+        #center = self.pointCenter()
+        #delta = pos - center
+        #for point in self._points:
+            #point.setPos(point.pos() + delta)
+        #self.updatePosition()

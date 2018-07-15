@@ -9,7 +9,7 @@ from copy import deepcopy
 
 class CategoryObject(GraphNode):
     def __init__(self, new=True):
-        super().__init__()
+        super().__init__(new)
         if new:
             label = TextItem("x")
             self.addLabel(label)
@@ -42,4 +42,22 @@ class CategoryObject(GraphNode):
         copy._editor = self.editor()
         self.copyLabelsTo(copy) 
         return copy
+    
+    def outgoingArrows(self):
+        out = []
+        for arr in self.arrows():
+            if arr.fromNode() is self:
+                out.append(arr)
+        return out
+    
+    def incomingArrows(self):
+        inc = []
+        for arr in self.arrows():
+            if arr.toNode() is self:
+                inc.append(arr)
+        return inc
+                        
+    def attachArrow(self, arr):
+        super().attachArrow(arr)
         
+            

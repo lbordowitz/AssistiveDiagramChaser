@@ -1,6 +1,6 @@
 from PyQt5.QtWidgets import QGraphicsTextItem, QMenu, QColorDialog, QGraphicsSceneEvent
 from geom_tools import minBoundingRect
-from PyQt5.QtCore import QRectF, QPointF, Qt, QEvent
+from PyQt5.QtCore import QRectF, QPointF, Qt, QEvent, pyqtSignal
 from qt_tools import unpickleGfxItemFlags, unpickleRenderHints, SimpleBrush, Pen, setPenColor
 from PyQt5.QtGui import QPainter, QTransform, QPen, QBrush, QColor
 from geom_tools import paintSelectionShape, rectToPoly, mag2D, closestRectPoint, closestPolyPoint, polygonFromArc
@@ -14,26 +14,47 @@ class GraphNode(GfxObject, LabeledGfx):
     DefaultCornerRadius = 10
     DefaultInsetPadding = 15
     Circle, RoundedRect = range(2)
+    nameChanged = pyqtSignal(str)
     
     def __init__(self, new=True):
-        super().__init__()
-        super().__init__()
+        super().__init__(new)
+        super().__init__(new)
         self._contextMenu = None
         self._shape = self.RoundedRect
         if new:
             self._insetPadding = self.DefaultInsetPadding
             self._defaultRect = self.DefaultRect
             self._cornerRadius = self.DefaultCornerRadius
-            self.setFlags(self.ItemIsMovable | self.ItemIsFocusable | self.ItemIsSelectable | self.ItemSendsGeometryChanges)
-            self._renderHints = QPainter.Antialiasing | QPainter.HighQualityAntialiasing | QPainter.SmoothPixmapTransform
             self._arrows = []
             self._boundScale = (1.0, 1.0)
-            self.setFiltersChildEvents(True)
             self._brush = SimpleBrush(Qt.cyan)
             self._pen = Pen(Qt.yellow, 2.0)
-            self.setupConnections()
+            self.setupConnections()                   
+        self.setFiltersChildEvents(True)
+        self._renderHints = QPainter.Antialiasing | QPainter.HighQualityAntialiasing | QPainter.SmoothPixmapTransform            
         self.setAcceptHoverEvents(True)
         self._hover = False
+        
+    def __setstate__(self, data):
+        super().__setstate__(data)
+        super().__setstate__(data)
+        self._insetPadding = data["inset padding"]
+        self._defaultRect = data["default rect"]
+        self._cornerRadius = data["corner radius"]
+        self._arrows = data["arrows"]
+        self._boundScale = data["bound scale"]        
+        self.setupConnections()
+        self.updateArrowsAndClearResidual()
+        
+    def __getstate__(self):
+        data = super().__getstate__()
+        data = {**data, **super().__getstate__()}
+        data["inset padding"] = self._insetPadding
+        data["default rect"] = self._defaultRect
+        data["corner radius"] = self._cornerRadius
+        data["arrows"] = self._arrows
+        data["bound scale"] = self._boundScale
+        return data
         
     def __deepcopy__(self, memo):
         copy = deepcopy(super(), memo)
@@ -66,9 +87,11 @@ class GraphNode(GfxObject, LabeledGfx):
     
     def setCornerRadius(self, radius):
         self._cornerRadius = radius
+        self.changed.emit()
         self.update()
     
     def setupConnections(self):
+        self.setFlags(self.ItemIsMovable | self.ItemIsFocusable | self.ItemIsSelectable | self.ItemSendsGeometryChanges)
         self._brushColorDlg = QColorDialog(self.brush().color())
         self._brushColorDlg.setOption(QColorDialog.ShowAlphaChannel, True)
         self._brushColorDlg.currentColorChanged.connect(lambda col: self.setBrush(SimpleBrush(col)))
@@ -86,12 +109,14 @@ class GraphNode(GfxObject, LabeledGfx):
     def arrows(self):
         return self._arrows
     
-    def addArrow(self, arr):
+    def attachArrow(self, arr):
         self._arrows.append(arr)
+        self.updateArrows()
         
-    def removeArrow(self, arr):
+    def detachArrow(self, arr):
         if arr in self._arrows:
             self._arrows.remove(arr)
+            self.updateArrows()
             
     def boundingRect(self):
         w = self._insetPadding
@@ -104,6 +129,7 @@ class GraphNode(GfxObject, LabeledGfx):
         if rect is None:
             rect = self.DefaultRect
         self._defaultRect = rect
+        self.changed.emit()
         self.update()
         
     def defaultBoundingRect(self):
@@ -229,6 +255,8 @@ class GraphNode(GfxObject, LabeledGfx):
         label = super().addLabel(label)
         if isinstance(label, TextItem):
             label.onPositionChanged = self.updateArrowsAndClearResidual
+        return label
     
     def updateGraph(self):
         self.updateArrows()
+        

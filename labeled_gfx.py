@@ -16,6 +16,8 @@ class LabeledGfx:
         label.setFlag(label.ItemIsFocusable, True)
         label.setParentItem(self)
         self.saveTextPosition()
+        if self.labelCount() == 1:
+            self.connectLabelChanged(label, self.nameChanged.emit)
         return label
         
     def removeLabel(self, label):
@@ -40,6 +42,8 @@ class LabeledGfx:
         label = self._labels[k]
         if isinstance(label, TextItem):
             label.setPlainText(text)
+            if label is self.label(0):
+                self.nameChanged.emit(text)
         else:
             raise NotImplementedError
         
@@ -82,7 +86,9 @@ class LabeledGfx:
         return self._labels    
     
     def label(self, k):
-        return self._labels[k]
+        if 0 <= k < self.labelCount():
+            return self._labels[k]
+        return None
     
     def saveTextPosition(self):
         raise NotImplementedError
@@ -95,5 +101,30 @@ class LabeledGfx:
             label_copy = deepcopy(label)
             copy.addLabel(label_copy)
         copy.saveTextPosition()
+        
+    def __setstate__(self, data):
+        for label in data["labels"]:
+            self.addLabel(label)
             
+    def __getstate__(self):
+        return {
+            "labels": self._labels
+        }
+    
+    def name(self):
+        if self.labelCount():
+            return self.labelText(0)
+        return "{unnamed}"    
+        
+    def __str__(self):
+        return self.name()    
+    
+    def setName(self, name):
+        if self.name() != name:
+            self.setLabelText(0, name)
             
+    def connectLabelChanged(self, label, slot):
+        if isinstance(label, TextItem):
+            label.onTextChanged.append(slot)
+        else:
+            raise NotImplementedError

@@ -12,17 +12,31 @@ class ControlPoint(GfxObject):
     mouseDragEnded = pyqtSignal(QPointF)
     
     def __init__(self, new=True):
-        super().__init__()
+        super().__init__(new)
         if new:
+            r = self.DefaultRadius
+            self._rect = QRectF(-r, -r, 2*r, 2*r)            
             self._radius = self.DefaultRadius
             self.setBrush(SimpleBrush(Qt.yellow))
             self.setPen(Pen(Qt.NoPen))
-            r = self.DefaultRadius
-            self._rect = QRectF(-r, -r, 2*r, 2*r)
             self._snapToGrid = False
         self.setFlags(self.ItemIsMovable | self.ItemIsFocusable | self.ItemSendsGeometryChanges | \
                       self.ItemSendsScenePositionChanges | self.ItemIsSelectable)
         self._dragging = False
+        
+    def __setstate__(self, data):
+        super().__setstate__(data)
+        self._radius = data["radius"]
+        self._rect = data["rect"]
+        self._snapToGrid = data["snap to grid"]
+        self.update()
+        
+    def __getstate__(self):
+        data = super().__getstate__()
+        data["radius"] = self._radius
+        data["rect"] = self._rect
+        data["snap to grid"] = self._snapToGrid
+        return data
         
     def __deepcopy__(self, memo):
         memo[id(self)] = self
@@ -36,12 +50,13 @@ class ControlPoint(GfxObject):
         return self._rect
     
     def paint(self, painter, option, widget):
-        if self.isSelected():
-            paintSelectionShape(painter, self)
-        painter.setRenderHints(painter.Antialiasing | painter.HighQualityAntialiasing)
-        painter.setPen(self.pen())
-        painter.setBrush(self.brush())
-        painter.drawEllipse(self.boundingRect())
+        if self.scene():
+            if self.isSelected():
+                paintSelectionShape(painter, self)
+            painter.setRenderHints(painter.Antialiasing | painter.HighQualityAntialiasing)
+            painter.setPen(self.pen())
+            painter.setBrush(self.brush())
+            painter.drawEllipse(self.boundingRect())
         
     def itemChange(self, change, value):
         if change == self.ItemPositionHasChanged:

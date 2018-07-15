@@ -5,12 +5,14 @@ from qt_tools import simpleMaxContrastingColor, Pen, firstParentGfxItemOfType
 from PyQt5.QtGui import QTransform
 from PyQt5.QtWidgets import QMenu
 import re
+from PyQt5.QtCore import Qt
 from graph_arrow import ControlPoint
 from category import Category
+from functor import Functor
 
 class CategoryDiagramEditor(GraphEditor):
-    def __init__(self, new=True):
-        super().__init__()
+    def __init__(self, window, new=True):
+        super().__init__(window, new)
         self.NodeType = CategoryObject
         self.ArrowType = CategoryArrow
         if new:
@@ -38,14 +40,28 @@ class CategoryDiagramEditor(GraphEditor):
                 node.setPos(item.mapFromScene(pos))
                 self.scene().placeItems(node, add=False)
                 item = node
+            elif isinstance(item, Category):
+                C = item
+                F = Functor()
+                F.setDomain(C)
+                F.setLabelText(0, "F")     
+                F.setEditor(self)
+                self.addArrow(F)
+                self.scene().placeItems(F.toPoint(), pos)
+                item = F
             elif isinstance(item, CategoryObject):
                 arr = self.ArrowType()
+                self.setupArrowConnections(arr)
                 arr.setEditor(self)
                 arr.setFrom(item)
-                self.addArrow(arr)
-                self.scene().placeItems(arr.toPoint(), pos)           
-                if isinstance(item, Category):
-                    arr.setLabelText(0, "F")
+                parent = item.parentItem()
+                if parent:
+                    parent.addMorphism(arr)
+                    add = False
+                    pos = parent.mapFromScene(pos)
+                else:
+                    add = True
+                self.scene().placeItems(arr.toPoint(), pos, add=add)
                 item = arr  
         else:
             node = Category()
@@ -53,7 +69,7 @@ class CategoryDiagramEditor(GraphEditor):
             node.setContextMenu(self.buildCategoryContextMenu(node))
             #node.zoomedIn.connect(lambda: self.nodeZoomedIn(node))
             node.focusedIn.connect(lambda: self.nodeFocusedIn(node))
-            node.setZValue(-1.0)
+            node.setZValue(0.0)
             self.addNode(node) 
             self.scene().placeItems(node, pos)   
             item = node        
@@ -80,42 +96,45 @@ class CategoryDiagramEditor(GraphEditor):
             menu = QMenu()
         menu = self.buildNodeContextMenu(cat, menu)
         menu.addSeparator()
+        menu.addAction("Compose Arrows").triggered.connect(lambda b: cat.composeArrows())
+        menu.addSeparator()
         action = menu.addAction("Edit Diagram")
         action.setCheckable(True)
         action.setChecked(False)
         action.toggled.connect(lambda b: cat.setEditing(b))
         return menu
     
-    def arrowStartHasChanged(self, arr, pos):
+    def arrowExtremityHasChanged(self, arr, pos, is_start=False):
         items = self.scene().items(pos)
+        filtered = []
         for item in items:
-            item = firstParentGfxItemOfType(item, self.NodeType)
-            if item:
-                if arr.toNode() and isinstance(arr.toNode().parentItem(), Category):
-                    cat = arr.toNode().parentItem()
-                    if item in cat.objects():
-                        arr.setFrom(item)
-                else:
-                    arr.setFrom(item)
-                break    
-            
-    def arrowEndHasChanged(self, arr, pos):
-        items = self.scene().items(pos)
-        for item in items:
-            item = firstParentGfxItemOfType(item, self.NodeType)
-            if item:
-                if arr.fromNode() and isinstance(arr.fromNode().parentItem(), Category):
-                    cat = arr.fromNode().parentItem()
-                    if item in cat.objects():
-                        arr.setTo(item)
-                else:
-                    arr.setTo(item)
-                break
+            if item is arr.parentItem():
+                continue
+            if item is arr:
+                continue
+            if isinstance(item, ControlPoint):
+                continue
+            filtered.append(item)
+        if filtered:
+            for item in filtered:
+                item = firstParentGfxItemOfType(item, self.NodeType)
+                if item:  # There is a node!
+                    if arr.canConnectTo(item, is_start):
+                        if is_start:
+                            arr.setDomain(item, undoable=True)
+                        else:
+                            arr.setCodomain(item, undoable=True)
+                        break 
+        else:
+            # There is no sufficient item at pos
+            if is_start:
+                arr.setDomain(None, undoable=True)
+            else:
+                arr.setCodomain(None, undoable=True)            
             
     def buildSceneContextMenu(self, menu=None):
         if menu is None:
             menu = QMenu()
-        delete = menu.addAction("Delete").triggered.connect(self.deleteItems)
         return super().buildSceneContextMenu(menu)
     
     def deleteItems(self, items=None):
@@ -132,18 +151,8 @@ class CategoryDiagramEditor(GraphEditor):
             if isinstance(item, CategoryObject):
                 self.removeNode(item)
             elif isinstance(item, CategoryArrow):
-                self.removeArrow(item)
+                self.detachArrow(item)
             parent = item.parentItem()
             if parent:
                 if isinstance(parent, Category):
                     parent.removeObject(item)
-
-    def addObjectToCategory(self, obj, cat):
-        obj.setContextMenu(self.buildNodeContextMenu(obj))
-        #node.zoomedIn.connect(lambda: self.nodeZoomedIn(node))
-        obj.focusedIn.connect(lambda: self.nodeFocusedIn(obj))
-        obj.setZValue(-1.0)
-        #self.scene().placeItems(node, pos)
-        cat.addObject(obj)
-        for arr in obj.arrows():
-            self.addArrow(arr)        
