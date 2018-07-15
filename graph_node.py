@@ -79,7 +79,7 @@ class GraphNode(GfxObject, LabeledGfx):
         super().hoverLeaveEvent(event)
         
     def sceneEventFilter(self, watched, event):
-        if event.type() == QEvent.GraphicsSceneMouseMove:
+        if event.type() == QEvent.GraphicsSceneMouseMove and mag2D(event.scenePos() - event.lastScenePos()) > 1:
             self.updateArrows()
             self.scene().update()
         return False

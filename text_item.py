@@ -5,6 +5,9 @@ from qt_tools import PseudoSignal, Pen, unpickleGfxItemFlags
 from copy import deepcopy
 from uuid import uuid4
 
+class KeyPressedSignal(PseudoSignal):
+    signal = pyqtSignal()
+
 class TextItem(QGraphicsTextItem):
     def __init__(self, text=None, new=True):
         super().__init__(text)
@@ -18,6 +21,13 @@ class TextItem(QGraphicsTextItem):
         self.pressedEventHandler = None
         self.onPositionChanged = None
         self._uid = uuid4()
+        self.keyPressed = KeyPressedSignal()
+        self.keyPressed.connect(self.dispatchOnTextChanged)
+        
+    def dispatchOnTextChanged(self):
+        text = self.toPlainText()
+        for slot in self.onTextChanged:
+            slot(text)
         
     def uid(self):
         return self._uid
@@ -47,19 +57,16 @@ class TextItem(QGraphicsTextItem):
         copy._undoStack = None              # Can't copy an undo stack since it holds references to this item and will change /it/
         copy.setPos(self.pos())
         return copy
-        
+    
+    def keyPressEvent(self, event):
+        self.keyPressed.emit()
+        super().keyPressEvent(event)
+                
     def setUndoStack(self):
         return self._undoStack
-       
-    def keyPressEvent(self, event):
-        super().keyPressEvent(event)
-        text = self.toPlainText()
-        if self.onTextChanged:
-            for slot in self.onTextChanged:
-                slot(text)
-                
+                    
     def focusOutEvent(self, event):
-        self.setTextInteraction(False)
+        #self.setTextInteraction(False)
         super().focusOutEvent(event)            
     
     def setPlainText(self, text):
@@ -122,3 +129,8 @@ class TextItem(QGraphicsTextItem):
         if selected:
             if self.parentItem():
                 self.parentItem().setSelected(False)
+                
+    def delete(self):
+        self.setParentItem(None)
+        if self.scene():
+            self.scene().removeItem(self)

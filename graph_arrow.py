@@ -64,6 +64,8 @@ class GraphArrow(GfxObject, LabeledGfx):
         copy._points = deepcopy(self._points, memo)
         for point in copy._points:
             point.setParentItem(self)
+        copy._to = None
+        copy._from = None
         copy._to = deepcopy(self._to, memo)
         copy._from = deepcopy(self._from, memo)
         copy._pen = deepcopy(self._pen, memo)
@@ -125,7 +127,7 @@ class GraphArrow(GfxObject, LabeledGfx):
         if len(self._points) == 4:
             self._points[1].positionHasChanged.connect(lambda pos: self.controlPointPosHasChanged(self._points[1], pos))         
             self._points[2].positionHasChanged.connect(lambda pos: self.controlPointPosHasChanged(self._points[2], pos))
-        self._contextMenu = self.buildDefaultContextMenu()
+        #self._contextMenu = self.buildDefaultContextMenu()
   
     def source(self):
         if self._from is None:
@@ -190,7 +192,7 @@ class GraphArrow(GfxObject, LabeledGfx):
         painter.drawPath(bezier_path)
 
     def isBezier(self):
-        return len(self._points) > 2
+        return len(self._points) == 4
 
     def setLine(self, line):
         self._points[0].setPos(line.p1())
@@ -248,22 +250,23 @@ class GraphArrow(GfxObject, LabeledGfx):
         return menu
         
     def toggleBezier(self, toggled):
-        if toggled:
-            for k in range(0, 2):
-                ctrl_pt = ControlPoint()
-                ctrl_pt.setParentItem(self)
-                self._points.insert(1, ctrl_pt)
-                ctrl_pt.positionHasChanged.connect(lambda pos: self.controlPointPosHasChanged(ctrl_pt, pos))         
-        else:
-            point = self._points.pop(1)
-            self.scene().removeItem(point)
-            point.setParentItem(None)
-            point = self._points.pop(1)
-            self.scene().removeItem(point)
-            point.setParentItem(None)
-            self.updatePosition()
-        self.setLinePoints(self._points[0].pos(), self._points[-1].pos())
-        self.bezierToggled.emit(toggled)
+        if toggled != self.isBezier():
+            if toggled:
+                for k in range(0, 2):
+                    ctrl_pt = ControlPoint()
+                    ctrl_pt.setParentItem(self)
+                    self._points.insert(1, ctrl_pt)
+                    ctrl_pt.positionHasChanged.connect(lambda pos: self.controlPointPosHasChanged(ctrl_pt, pos))         
+            else:
+                point = self._points.pop(1)
+                self.scene().removeItem(point)
+                point.setParentItem(None)
+                point = self._points.pop(1)
+                self.scene().removeItem(point)
+                point.setParentItem(None)
+                self.updatePosition()
+            self.setLinePoints(self._points[0].pos(), self._points[-1].pos())
+            self.bezierToggled.emit(toggled)
     
     def arrowHeadSize(self):
         return 15

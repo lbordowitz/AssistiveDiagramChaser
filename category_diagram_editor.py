@@ -7,7 +7,7 @@ from PyQt5.QtWidgets import QMenu
 import re
 from PyQt5.QtCore import Qt
 from graph_arrow import ControlPoint
-from category import Category
+from diagram import Diagram
 from functor import Functor
 
 class CategoryDiagramEditor(GraphEditor):
@@ -28,7 +28,7 @@ class CategoryDiagramEditor(GraphEditor):
     def placeItem(self, pos):
         item = self.scene().itemAt(pos, QTransform())
         if item:
-            if isinstance(item, Category) and item.editing():
+            if isinstance(item, Diagram) and item.editing():
                 node = self.NodeType()
                 node.setEditor(self)
                 node.setContextMenu(self.buildNodeContextMenu(node))
@@ -40,10 +40,11 @@ class CategoryDiagramEditor(GraphEditor):
                 node.setPos(item.mapFromScene(pos))
                 self.scene().placeItems(node, add=False)
                 item = node
-            elif isinstance(item, Category):
+            elif isinstance(item, Diagram):
                 C = item
                 F = Functor()
                 F.setFrom(C)
+                F.setContextMenu(self.buildArrowContextMenu(F))
                 F.setLabelText(0, "F")     
                 F.setEditor(self)
                 self.addArrow(F)
@@ -64,7 +65,7 @@ class CategoryDiagramEditor(GraphEditor):
                 self.scene().placeItems(arr.toPoint(), pos, add=add)
                 item = arr  
         else:
-            node = Category()
+            node = Diagram()
             node.setEditor(self)
             node.setContextMenu(self.buildCategoryContextMenu(node))
             #node.zoomedIn.connect(lambda: self.nodeZoomedIn(node))

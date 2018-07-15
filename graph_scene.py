@@ -184,3 +184,8 @@ class GraphScene(QGraphicsScene):
         super().setBackgroundBrush(brush)
         self.backgroundColorChanged.emit(brush.color())
         
+    def updateAllArrows(self):
+        for item in self.items():
+            if isinstance(item, GraphArrow):
+                item.updatePosition()
+        self.update()

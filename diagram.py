@@ -7,7 +7,7 @@ from copy import deepcopy
 from qt_tools import SimpleBrush
 from commands import MethodCallCommand
 
-class Category(CategoryObject):
+class Diagram(CategoryObject):
     def __init__(self, new=True):
         self._objects = {}
         self._morphisms = {}
@@ -40,11 +40,11 @@ class Category(CategoryObject):
     def morphisms(self):
         return self._morphisms
         
-    def sceneEventFilter(self, watched, event):
-        if watched.uid() in self._objects:
-            if event.type() == QEvent.GraphicsSceneMouseMove:
-                self.updateArrowsAndClearResidual()
-        return False
+    #def sceneEventFilter(self, watched, event):
+        #if watched.uid() in self._objects:
+            #if event.type() == QEvent.GraphicsSceneMouseMove:
+                #self.updateArrowsAndClearResidual()
+        #return False
     
     def editing(self):
         return self._editing
@@ -74,7 +74,7 @@ class Category(CategoryObject):
                         gf.setTo(g.codomain())
                         self.editor().attachArrow(gf)
                         
-    def addMorphism(self, arr, undoable=False, emit=True):
+    def addMorphism(self, arr, undoable=False, loops=None):
         if arr.uid() not in self._morphisms:
             if undoable:
                 self.editor().pushCommand(MethodCallCommand("Adding morphism " + str(arr) + " to category " + str(self),
@@ -86,10 +86,12 @@ class Category(CategoryObject):
                 arr.setParentItem(self)
                 self._morphisms[arr.uid()] = arr
                 self.updateArrows()
-                if emit:
-                    self.updateFunctorImages()
+                if loops is None:
+                    self.updateFunctorImages(loops)
+                else:
+                    self.updateFunctorImages(loops - 1)
         
-    def removeMorphism(self, arr, undoable=False, emit=True):
+    def removeMorphism(self, arr, undoable=False, loops=None):
         if arr.uid() in self._morphisms:
             if undoable:
                 self.editor().pushCommand(MethodCallCommand("Removing morphism " + str(arr) + " from category " + str(self),
@@ -100,10 +102,12 @@ class Category(CategoryObject):
                 arr.setParentItem(None)
                 del self._morphisms[arr.uid()]
                 self.updateArrowsAndClearResidual()
-                if emit:
-                    self.updateFunctorImages()
+                if loops is None:
+                    self.updateFunctorImages(loops)
+                else:
+                    self.updateFunctorImages(loops - 1)
                 
-    def addObject(self, obj, undoable=False, emit=True):
+    def addObject(self, obj, undoable=False, loops=None):
         if obj.uid() not in self._objects:
             if undoable:
                 getText = lambda: "Adding object " + str(obj) + " to category " + str(self)
@@ -117,10 +121,13 @@ class Category(CategoryObject):
                 self._objects[obj.uid()] = obj
                 obj.installSceneEventFilter(self)
                 self.updateArrows()
-                if emit:    # All things propagating to other nodes go here
+                obj.positionChanged.connect(lambda pos: self.updateArrowsAndClearResidual())
+                if loops is None:
                     self.updateFunctorImages()
+                elif loops > 0:
+                    self.updateFunctorImages(loops - 1)
                                         
-    def removeObject(self, obj, undoable=False, emit=True):
+    def removeObject(self, obj, undoable=False, loops=None):
         if obj.uid() in self._objects:
             if undoable:
                 getText = lambda: "Removing object " + str(obj) + " from category " + str(self)
@@ -134,8 +141,10 @@ class Category(CategoryObject):
                     del self._objects[obj.uid()]
                 obj.removeSceneEventFilter(self)
                 self.updateArrowsAndClearResidual()
-                if emit:
-                    self.updateFunctorImages()
+                if loops is None:
+                    self.updateFunctorImages(loops)
+                else:
+                    self.updateFunctorImages(loops - 1)
         
     def attachArrow(self, fun):
         super().attachArrow(fun)
@@ -145,12 +154,25 @@ class Category(CategoryObject):
             other_end = self.codomain()
         else:
             other_end = self.domain()
-        if isinstance(other_end, Category) and other_end.parentItem() is item.parentItem() and \
-           isinstance(item, Category):
+        if isinstance(other_end, Diagram) and other_end.parentItem() is item.parentItem() and \
+           isinstance(item, Diagram):
             return True
         return False    
     
-    def updateFunctorImages(self):
+    def updateFunctorImages(self, loops=None):
         for F in self.outgoingArrows():
-            F.updateImage()
+            F.updateImage(loops)
             
+    def getMorphism(self, uid):
+        return self._morphisms.get(uid, None)
+    
+    def getObject(self, uid):
+        return self._objects.get(uid, None)
+    
+    def nonempty(self):
+        res = False
+        if self._morphisms:
+            res = True
+        elif self._objects:
+            res = True
+        return res

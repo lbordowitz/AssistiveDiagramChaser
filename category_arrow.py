@@ -1,18 +1,21 @@
 from graph_arrow import GraphArrow
 from text_item import TextItem
-from PyQt5.QtCore import QPointF, Qt, QLineF, QRectF, QEvent
+from PyQt5.QtCore import QPointF, Qt, QLineF, QRectF, QEvent, pyqtSignal
 from PyQt5.QtWidgets import QMenu, QActionGroup
 from PyQt5.QtGui import QPainter, QBrush, QPainterPath, QPainterPathStroker
 from qt_tools import Pen
 from geom_tools import mag2D, dot2D, paintSelectionShape
 from math import pi
-from category import Category
+from diagram import Diagram
 from copy import deepcopy
 import re
 from commands import MethodCallCommand
 import category_object
 
 class CategoryArrow(GraphArrow):
+    domainSet = pyqtSignal(category_object.CategoryObject)
+    codomainSet = pyqtSignal(category_object.CategoryObject)
+    
     def __init__(self, new=True):
         super().__init__(new)
         if new:
@@ -212,7 +215,7 @@ class CategoryArrow(GraphArrow):
         if cod is not self.codomain():
             if undoable:
                 getText = lambda: "Set codomain of " + str(self) + " to " + str(cod)
-                command = MethodCallCommand(getText(), self.setTo, [cod], self.setTo, [None], self.editor())
+                command = MethodCallCommand(getText(), self.setTo, [cod], self.setTo, [self.domain()], self.editor())
                 slot = lambda name: command.setText(getText())
                 self.nameChanged.connect(slot)
                 if cod is not None:
@@ -220,12 +223,13 @@ class CategoryArrow(GraphArrow):
                 self.editor().pushCommand(command)
             else:
                 super().setTo(cod)
+            self.codomainSet.emit(cod)
         
     def setFrom(self, dom, undoable=False):
         if dom is not self.domain():
             if undoable:
                 getText = lambda: "Set domain of " + str(self) + " to " + str(dom)
-                command = MethodCallCommand(getText(), self.setFrom, [dom], self.setFrom, [None], self.editor())
+                command = MethodCallCommand(getText(), self.setFrom, [dom], self.setFrom, [self.codomain()], self.editor())
                 slot = lambda name: command.setText(getText())
                 self.nameChanged.connect(slot)
                 if dom is not None:
@@ -233,6 +237,7 @@ class CategoryArrow(GraphArrow):
                 self.editor().pushCommand(command)
             else:
                 super().setFrom(dom)
+            self.domainSet.emit(dom)
                 
     def domain(self):
         return self.fromNode()
@@ -249,6 +254,8 @@ class CategoryArrow(GraphArrow):
            other_end.parentItem() is item.parentItem() and \
            isinstance(item, category_object.CategoryObject):
             return True
+        elif other_end is None:
+            return True
         return False
             
     def codomain(self):
@@ -259,6 +266,6 @@ class CategoryArrow(GraphArrow):
     
     def setDomain(self, dom):
         self.setFrom(dom)
-        
+                
     def setCodomain(self, cod):
         self.setTo(cod)
