@@ -37,3 +37,8 @@ A python 3.6 / PyQt5 based application that assists you as a mathematician in ed
         "Git clone...".  You should see a "Load Putty Key" feature.  Select and find your previously stored private key.
     
     * Should you ever get authentication errors, just repeat the above procedure and forget / delete your previous keys.
+    
+---
+
+# Screenshots / Videos
+https://youtu.be/IrF1iXPVsQY
