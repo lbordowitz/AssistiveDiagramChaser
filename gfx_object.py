@@ -1,6 +1,6 @@
 from PyQt5.QtWidgets import QGraphicsObject, QUndoStack, QApplication
 from qt_tools import simpleMaxContrastingColor
-from PyQt5.QtGui import QPainterPath
+from PyQt5.QtGui import QPainterPath, QColor
 from PyQt5.QtCore import Qt, QPointF, pyqtSignal
 from geom_tools import paintSelectionShape, rectToPoly
 from qt_tools import Pen, SimpleBrush, unpickleGfxItemFlags
@@ -13,23 +13,49 @@ class GfxObject(QGraphicsObject):
     zoomedIn = pyqtSignal()
     positionChanged = pyqtSignal(QPointF)
     positionChangedDelta = pyqtSignal(QPointF)
-    deleted = pyqtSignal()
+    deleted = pyqtSignal(QGraphicsObject)
+    undeleted = pyqtSignal(QGraphicsObject)
     DefaultZoomThreshold = 3
     
     def __init__(self, new=True):
         super().__init__()
         self._snapToGrid = True
         if new:
+            self._editable = True
+            self._editPen = Pen(QColor(Qt.green), 1.0)
+            self._penSave = None            
             self._pen = Pen(Qt.NoPen)
             self._brush = SimpleBrush(Qt.NoBrush)
             self._locked = False
         self._zoomThreshold = self.DefaultZoomThreshold
         self._zoom = 0
         self._commands = []
-        self._uid = uuid4()
+        self._uid = str(uuid4())
+        
+    def setEditable(self, editable):
+        if self._editable != editable:
+            self._editable = editable
+            if editable:
+                self._penSave = self.pen()
+                self.setPen(self._editPen)
+            else:
+                if self._penSave:
+                    self.setPen(self._penSave)
+                    self._penSave = None
+            self.update()
+            
+    def setEditablePen(self, pen):
+        self._editPen = pen
+        self.update()
+            
+    def editable(self):
+        return self._editable
         
     def uid(self):
         return self._uid
+    
+    def setUid(self, uid):
+        self._uid = uid
         
     def __setstate__(self, data):
         self.__init__(new=False)
@@ -60,6 +86,9 @@ class GfxObject(QGraphicsObject):
         copy.setPos(QPointF(self.pos()))
         copy.setFlags(self.flags())
         copy._locked = self._locked
+        copy._editable = self._editable
+        copy._editPen = deepcopy(self._editPen, memo)
+        copy._penSave = deepcopy(self._penSave, memo)   
         return copy
     
     def locked(self):
@@ -214,10 +243,33 @@ class GfxObject(QGraphicsObject):
                 k -= 1
         return None
     
-    def delete(self):
+    def delete(self, deleted=None, emit=True):
+        if deleted is None:
+            deleted = {}
+        deleted["parent"] = self.parentItem()
+        deleted["children"] = []
         self.setParentItem(None)
+        deleted["scene"] = self.scene()
         if self.scene():
             self.scene().removeItem(self)
-        for child in self.children():
-            child.delete()
-        self.deleted.emit()
+        for child in self.childItems():
+            d = child.delete()
+            t = (child, d)
+            deleted["children"].append(t)
+        if emit:
+            self.deleted.emit(self)
+        return deleted
+        
+    def undelete(self, deleted, emit=True):
+        scene = deleted["scene"]
+        if scene:
+            scene.addItem(self)
+        self.setParentItem(deleted["parent"])
+        for t in deleted["children"]:
+            d = t[1];  child = t[0]
+            child.undelete(d)
+        if emit:
+            self.undeleted.emit(self)
+            
+    def uidPairHash(self, x, y):
+        return x.uid() + "," + y.uid()

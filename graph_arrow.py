@@ -12,7 +12,7 @@ from copy import deepcopy
 
 class GraphArrow(GfxObject, LabeledGfx):
     EditTime = 1500
-    nameChanged = pyqtSignal(str)
+    symbolChanged = pyqtSignal(str)
     bezierToggled = pyqtSignal(bool)
     controlPointsPosChanged = pyqtSignal(list)    # list of points
     
@@ -38,6 +38,7 @@ class GraphArrow(GfxObject, LabeledGfx):
         self._editTimer = None
         self._updatingPos = False
         self._snapToGrid = False
+        self.hoverLeaveSlot()
         
     def __setstate__(self, data):
         super().__setstate__(data)
@@ -88,7 +89,8 @@ class GraphArrow(GfxObject, LabeledGfx):
         return self._pen
         
     def hoverEnterEvent(self, event):
-        self.hoverEnterSlot()
+        if self.editable():
+            self.hoverEnterSlot()
         
     def hoverEnterSlot(self):
         if self._editTimer:
@@ -97,7 +99,8 @@ class GraphArrow(GfxObject, LabeledGfx):
             point.setVisible(True)
             
     def hoverLeaveEvent(self, event):
-        self.hoverLeaveSlot()
+        if self.editable():
+            self.hoverLeaveSlot()
         
     def hoverLeaveSlot(self):
         if self._editTimer:
@@ -429,7 +432,7 @@ class GraphArrow(GfxObject, LabeledGfx):
             
     def itemChange(self, change, value):
         if change == self.ItemSelectedChange:
-            if value == True:
+            if value == True and self.editable():
                 for point in self._points:
                     point.setVisible(True)
                     point.setSelected(True)
@@ -458,7 +461,23 @@ class GraphArrow(GfxObject, LabeledGfx):
             #point.setPos(point.pos() + delta)
         #self.updatePosition()
         
-    def delete(self):
+    def delete(self, deleted=None):
+        if deleted is None:
+            deleted = {}
+        deleted["to"] = self.toNode()
+        deleted["from"] = self.fromNode()
         self.setTo(None)
         self.setFrom(None)
-        super().delete()
+        super().delete(deleted)
+        return deleted
+
+    def undelete(self, deleted, emit=True):
+        super().undelete(deleted, emit=False)
+        self.setTo(deleted["to"])
+        self.setFrom(deleted["from"])
+        if emit:
+            self.deleted.emit(self)
+            
+    def setEditable(self, editable):
+        super().setEditable(editable)
+        super().setEditable(editable)

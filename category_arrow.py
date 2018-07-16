@@ -6,7 +6,7 @@ from PyQt5.QtGui import QPainter, QBrush, QPainterPath, QPainterPathStroker
 from qt_tools import Pen
 from geom_tools import mag2D, dot2D, paintSelectionShape
 from math import pi
-from diagram import Diagram
+from category_diagram import CategoryDiagram
 from copy import deepcopy
 import re
 from commands import MethodCallCommand
@@ -216,10 +216,10 @@ class CategoryArrow(GraphArrow):
             if undoable:
                 getText = lambda: "Set codomain of " + str(self) + " to " + str(cod)
                 command = MethodCallCommand(getText(), self.setTo, [cod], self.setTo, [self.domain()], self.editor())
-                slot = lambda name: command.setText(getText())
-                self.nameChanged.connect(slot)
+                slot = lambda symbol: command.setText(getText())
+                self.symbolChanged.connect(slot)
                 if cod is not None:
-                    cod.nameChanged.connect(slot)
+                    cod.symbolChanged.connect(slot)
                 self.editor().pushCommand(command)
             else:
                 super().setTo(cod)
@@ -230,10 +230,10 @@ class CategoryArrow(GraphArrow):
             if undoable:
                 getText = lambda: "Set domain of " + str(self) + " to " + str(dom)
                 command = MethodCallCommand(getText(), self.setFrom, [dom], self.setFrom, [self.codomain()], self.editor())
-                slot = lambda name: command.setText(getText())
-                self.nameChanged.connect(slot)
+                slot = lambda symbol: command.setText(getText())
+                self.symbolChanged.connect(slot)
                 if dom is not None:
-                    dom.nameChanged.connect(slot)
+                    dom.symbolChanged.connect(slot)
                 self.editor().pushCommand(command)
             else:
                 super().setFrom(dom)
@@ -257,13 +257,7 @@ class CategoryArrow(GraphArrow):
         elif other_end is None:
             return True
         return False
-            
-    def codomain(self):
-        return self.toNode()
-    
-    def domain(self):
-        return self.fromNode()
-    
+              
     def setDomain(self, dom):
         self.setFrom(dom)
                 

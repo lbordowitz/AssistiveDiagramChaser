@@ -1,5 +1,5 @@
 from PyQt5.QtWidgets import QGraphicsTextItem, QUndoStack, QUndoCommand, QGraphicsItem, QGraphicsSceneMouseEvent
-from PyQt5.QtCore import Qt, QPointF, pyqtSignal, QEvent, QRectF
+from PyQt5.QtCore import Qt, QPointF, pyqtSignal, QEvent, QRectF, QTimer
 from PyQt5.QtGui import QColor, QTextCursor, QPainter, QFontMetrics
 from qt_tools import PseudoSignal, Pen, unpickleGfxItemFlags
 from copy import deepcopy
@@ -9,22 +9,43 @@ class KeyPressedSignal(PseudoSignal):
     signal = pyqtSignal()
 
 class TextItem(QGraphicsTextItem):
+    DispatchSignalDelay = 50    # milliseconds
+    
     def __init__(self, text=None, new=True):
         super().__init__(text)
+        if new:
+            self._editable = None
+            self._editableColor = QColor(255, 255, 0, 240)
+            self._colorSave = None
+            self.setEditable(False)
+            self.setupConnections()
+        self.setDefaultTextColor(QColor(Qt.darkMagenta))
         self.onTextChanged = []
         self.setFlags(self.ItemIsMovable | self.ItemIsFocusable | self.ItemIsSelectable | self.ItemSendsGeometryChanges)
+        self.pressedEventHandler = None
+        self.onPositionChanged = None
+        self._uid = uuid4()        
+        self._dispatchTimer = None        
+        
+    def setupConnections(self):
+        self.keyPressed = KeyPressedSignal()
+        self.keyPressed.connect(self.dispatchOnTextChanged)
         self.mouseDoubleClickHandler = lambda event: self.setTextInteraction(True, select_all=True)
         self.setTextInteractionFlags(Qt.NoTextInteraction)
         # HACKFIX: gets rid of single-click selection rect around text when it first appears.  Now only shows selection rect when double-clicked:
         self.setTextInteraction(True)
-        self.setTextInteraction(False)
-        self.pressedEventHandler = None
-        self.onPositionChanged = None
-        self._uid = uuid4()
-        self.keyPressed = KeyPressedSignal()
-        self.keyPressed.connect(self.dispatchOnTextChanged)
+        self.setTextInteraction(False)        
         
     def dispatchOnTextChanged(self):
+        if self._dispatchTimer:
+            self._dispatchTimer.stop()
+        self._dispatchTimer = QTimer()
+        self._dispatchTimer.setInterval(self.DispatchSignalDelay)
+        self._dispatchTimer.timeout.connect(self._dispatchOnTextChanged)
+        self._dispatchTimer.setSingleShot(True)
+        self._dispatchTimer.start()
+        
+    def _dispatchOnTextChanged(self):
         text = self.toPlainText()
         for slot in self.onTextChanged:
             slot(text)
@@ -50,12 +71,16 @@ class TextItem(QGraphicsTextItem):
     
     def __deepcopy__(self, memo):
         copy = type(self)(new=False)
+        copy._editable = self._editable
+        copy._editableColor = QColor(self._editableColor)
+        copy._colorSave = QColor(self._colorSave)
         copy.setPlainText(self.toPlainText())
         memo[id(self)] = copy
         copy.setFlags(self.flags())
         copy.setDefaultTextColor(self.defaultTextColor())
         copy._undoStack = None              # Can't copy an undo stack since it holds references to this item and will change /it/
         copy.setPos(self.pos())
+        copy.setupConnections()
         return copy
     
     def keyPressEvent(self, event):
@@ -78,8 +103,7 @@ class TextItem(QGraphicsTextItem):
                       
     def setTextInteraction(self, state, select_all=True):
         text = self.toPlainText()
-
-        if state and self.textInteractionFlags() == Qt.NoTextInteraction:
+        if self.editable() and state and self.textInteractionFlags() == Qt.NoTextInteraction:
             # switch on editor mode:
             self.setTextInteractionFlags(Qt.TextEditorInteraction)
             # manually do what a mouse click would do else:
@@ -89,7 +113,6 @@ class TextItem(QGraphicsTextItem):
                 c = self.textCursor()
                 c.select(QTextCursor.WordUnderCursor)
                 self.setTextCursor(c)
-            
         elif not state and self.textInteractionFlags() == Qt.TextEditorInteraction:
             # turn off editor mode:
             self.setTextInteractionFlags(Qt.NoTextInteraction)
@@ -130,7 +153,42 @@ class TextItem(QGraphicsTextItem):
             if self.parentItem():
                 self.parentItem().setSelected(False)
                 
-    def delete(self):
+    def delete(self, deleted=None):
+        if deleted is None:
+            deleted = {}
+        deleted["parent"] = self.parentItem()
+        deleted["scene"] = self.scene()
         self.setParentItem(None)
         if self.scene():
             self.scene().removeItem(self)
+        return deleted        
+            
+    def undelete(self, deleted):
+        self.setParentItem(deleted["parent"])
+        if deleted["scene"]:
+            deleted["scene"].addItem(self)
+            
+    def setEditable(self, editable):
+        if self._editable != editable:
+            self._editable = editable
+            if editable:
+                self._colorSave = self.color()
+                self.setColor(self._editableColor)
+            else:
+                if self._colorSave:
+                    self.setColor(self._colorSave)
+                self._colorSave = None
+            self.update()
+            
+    def setEditableColor(self, color):
+        self._editableColor = color
+        self.update()
+            
+    def editable(self):
+        return self._editable            
+    
+    def setColor(self, color):
+        self.setDefaultTextColor(color)
+        
+    def color(self):
+        return self.defaultTextColor()

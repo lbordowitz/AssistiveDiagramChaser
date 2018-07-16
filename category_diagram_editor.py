@@ -7,8 +7,9 @@ from PyQt5.QtWidgets import QMenu
 import re
 from PyQt5.QtCore import Qt
 from graph_arrow import ControlPoint
-from diagram import Diagram
+from category_diagram import CategoryDiagram
 from functor import Functor
+from commands import MethodCallCommand, DeleteItemsCommand
 
 class CategoryDiagramEditor(GraphEditor):
     def __init__(self, window, new=True):
@@ -28,7 +29,7 @@ class CategoryDiagramEditor(GraphEditor):
     def placeItem(self, pos):
         item = self.scene().itemAt(pos, QTransform())
         if item:
-            if isinstance(item, Diagram) and item.editing():
+            if isinstance(item, CategoryDiagram) and item.editing():
                 node = self.NodeType()
                 node.setEditor(self)
                 node.setContextMenu(self.buildNodeContextMenu(node))
@@ -40,13 +41,13 @@ class CategoryDiagramEditor(GraphEditor):
                 node.setPos(item.mapFromScene(pos))
                 self.scene().placeItems(node, add=False)
                 item = node
-            elif isinstance(item, Diagram):
+            elif isinstance(item, CategoryDiagram):
                 C = item
                 F = Functor()
-                F.setFrom(C)
-                F.setContextMenu(self.buildArrowContextMenu(F))
                 F.setLabelText(0, "F")     
                 F.setEditor(self)
+                F.setFrom(C)
+                F.setContextMenu(self.buildArrowContextMenu(F))
                 self.addArrow(F)
                 self.scene().placeItems(F.toPoint(), pos)
                 item = F
@@ -65,7 +66,7 @@ class CategoryDiagramEditor(GraphEditor):
                 self.scene().placeItems(arr.toPoint(), pos, add=add)
                 item = arr  
         else:
-            node = Diagram()
+            node = CategoryDiagram()
             node.setEditor(self)
             node.setContextMenu(self.buildCategoryContextMenu(node))
             #node.zoomedIn.connect(lambda: self.nodeZoomedIn(node))
@@ -76,6 +77,8 @@ class CategoryDiagramEditor(GraphEditor):
             item = node        
         if isinstance(item, CategoryArrow):
             item.setFlag(item.ItemIsMovable, False)
+        if not isinstance(item, ControlPoint):
+            item.label(0).setEditable(True)
         return item
 
     def nodeFocusedIn(self, node):
@@ -104,6 +107,16 @@ class CategoryDiagramEditor(GraphEditor):
         action.setChecked(False)
         action.toggled.connect(lambda b: cat.setEditing(b))
         return menu
+    
+    def arrowExtremityAboutToChange(self, arr, pos, is_start=False):
+        if is_start:
+            if arr.fromNode():
+                arr.fromNode().updateArrowsAndClearResidual()
+            arr.setFrom(None, undoable=True)
+        else:
+            if arr.toNode():
+                arr.toNode().updateArrowsAndClearResidual()
+            arr.setTo(None, undoable=True)    
     
     def arrowExtremityHasChanged(self, arr, pos, is_start=False):
         items = self.scene().items(pos)
@@ -138,7 +151,7 @@ class CategoryDiagramEditor(GraphEditor):
             menu = QMenu()
         return super().buildSceneContextMenu(menu)
     
-    def deleteItems(self, items=None):
+    def deleteItems(self, items=None, undoable=False):
         if items is None:
             items = self.scene().selectedItems()
         children = []
@@ -148,5 +161,10 @@ class CategoryDiagramEditor(GraphEditor):
         for item in items:
             if item not in children:
                 filtered.append(item)
-        for item in filtered:
-            item.delete()
+        if undoable:
+            command = DeleteItemsCommand("Deleting items", filtered, editor=self)
+            self.pushCommand(command)
+        else:
+            for item in filtered:
+                item.delete()   
+                

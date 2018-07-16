@@ -17,7 +17,7 @@ class LabeledGfx:
         label.setParentItem(self)
         self.saveTextPosition()
         if self.labelCount() == 1:
-            self.connectLabelChanged(label, self.nameChanged.emit)
+            self.connectLabelChanged(label, self.symbolChanged.emit)
         return label
         
     def removeLabel(self, label):
@@ -43,7 +43,7 @@ class LabeledGfx:
         if isinstance(label, TextItem):
             label.setPlainText(text)
             if label is self.label(0):
-                self.nameChanged.emit(text)
+                self.symbolChanged.emit(text)
         else:
             raise NotImplementedError
         
@@ -111,17 +111,17 @@ class LabeledGfx:
             "labels": self._labels
         }
     
-    def name(self):
+    def symbol(self):
         if self.labelCount():
             return self.labelText(0)
         return "{unnamed}"    
         
     def __str__(self):
-        return self.name()    
+        return self.symbol()    
     
-    def setName(self, name):
-        if self.name() != name:
-            self.setLabelText(0, name)
+    def setSymbol(self, symbol):
+        if self.symbol() != symbol:
+            self.setLabelText(0, symbol)
             
     def connectLabelChanged(self, label, slot):
         if isinstance(label, TextItem):
@@ -132,3 +132,8 @@ class LabeledGfx:
     def delete(self):
         for label in self._labels:
             label.delete()
+            
+    def setEditable(self, editable):
+        for label in self._labels:
+            label.setEditable(editable)
+    

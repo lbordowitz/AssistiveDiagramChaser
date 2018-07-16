@@ -27,10 +27,10 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def app(self):
         return self._app
         
-    def addEditor(self, name):
+    def addEditor(self, symbol):
         editor = CategoryDiagramEditor(window=self)
-        self.tabWidget.addTab(editor, name)
-        self._editors[name] = editor
+        self.tabWidget.addTab(editor, symbol)
+        self._editors[symbol] = editor
         editor.setScene(GraphScene())
         editor.setUndoView(self.commandTimeline.addUndoView(editor.undoStack()))
         
@@ -40,7 +40,7 @@ class MainWindow(QMainWindow, Ui_MainWindow):
     def deleteSelectedItems(self):
         editor = self.currentEditor()
         if editor:
-            editor.deleteItems()
+            editor.deleteItems(undoable=True)
     
     def undoRecentChanges(self):
         editor = self.currentEditor()

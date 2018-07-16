@@ -1,7 +1,7 @@
 from category_arrow import CategoryArrow
-from diagram import Diagram
+from category_diagram import CategoryDiagram
 from PyQt5.QtWidgets import QGraphicsSceneHoverEvent, QMenu
-from commands import MethodCallCommand
+from commands import MethodCallCommand, TakeFunctorImage, UpdateFunctorImage
 from category_object import CategoryObject
 from copy import deepcopy
 
@@ -11,6 +11,7 @@ class Functor(CategoryArrow):
         super().__init__(new)
         if new:
             self._map = {}
+            self._signalsSlots = {}      # Keyed by uid
         self._memo = {}
         
     def __deepcopy__(self, memo):
@@ -20,155 +21,164 @@ class Functor(CategoryArrow):
         copy._reflectForward = self._reflectForward
         copy._reflectInverse = self._reflectInverse
         
-    def takeImage(self, map=None, memo=None, undoable=False):
-        if self.isFullyAttachedFunctor() and self.domain().nonempty():
-            if map is not None:
-                self._map = map
-            if memo is not None:
-                self._memo = memo                  
-            if undoable:
-                getText = lambda: "Take functor image " + self(str(self.domain()))
-                command = MethodCallCommand(getText(), self.takeImage, [], self.undoTakeImage, [], self.editor())
-                self.editor().pushCommand(command)
-                self.nameChanged.connect(lambda name: command.setText(getText()))
-                self.domain().nameChanged.connect(lambda name: command.setTExt(getText()))
-            else:            
-                G = self
-                C = G.domain()
-                D = G.codomain()
-                for x in list(C.objects().values()):    # So we can add to objects() during iteration  (endofunctors)
-                    if x.uid() not in G:
-                        y = G(x)
-                        G[x.uid()] = y.uid()
-                        D.addObject(y, loops=0)
-                        x.nameChanged.connect(lambda name: y.setName(G(name)))
-                        self.connectObjectToItsImage(x, y)
-                        for f in list(x.outgoingArrows()):
-                            if f.uid() not in G:
-                                g = G(f)
-                                G[f.uid()] = g.uid()
-                                D.addMorphism(g, loops=0)
-                                self.connectMorphismToItsImage(f, g)
+    def takeImage(self, dom=None, cod=None):
+        if dom is None:
+            dom = self.domain()
+        if cod is None:
+            cod = self.codomain()
+        if dom and cod and dom.nonempty():
+            getText = lambda: "Undo take functor image " + self(str(self.domain()))
+            command = TakeFunctorImage(getText(), dom, cod, functor=self, editor=self.editor())
+            self.editor().pushCommand(command)
+            self.symbolChanged.connect, lambda symbol: command.setText(getText())
+            self.domain().symbolChanged.connect(lambda symbol: command.setText(getText()))
+    
+    def connectSignal(self, uid_hash, signal, slots):
+        if uid_hash not in self._signalsSlots:
+            self._signalsSlots[uid_hash] = []
+        self._signalsSlots[uid_hash].append((signal, slots))
+        for slot in slots:
+            signal.connect(slot)
+            
+    def disconnectSignals(self, uid_hash):
+        if uid_hash in self._signalsSlots:
+            tuple_list = self._signalsSlots[uid_hash]
+            for signal, slots in tuple_list:
+                for slot in slots:
+                    signal.disconnect(slot)
+            del self._signalsSlots[uid_hash]
+            
+    def disconnectRemainingSignals(self):
+        for uid_hash in self._signalsSlots:
+            self.disconnectSignals(uid_hash)
+        self._signalsSlots.clear()
     
     def connectObjectToItsImage(self, x, y):
         F = self
-        x.nameChanged.connect(lambda name: y.setName(F(name)))
-        x.deleted.connect(y.delete)
-        x.deleted.connect(lambda: self.deleteFromMap(x))
-        x.positionChangedDelta.connect(lambda delta: self._reflectItemPosDelta(y, delta))
+        hash = self.uidPairHash(x, y)
+        self.connectSignal(hash, self.symbolChanged, [lambda sym: y.setSymbol(F(str(x)))])
+        self.connectSignal(hash, x.symbolChanged, [lambda sym: y.setSymbol(F(sym))])
+        self.connectSignal(hash, x.deleted, [lambda o: y.delete(), self.deleteMapping])
+        self.connectSignal(hash, x.positionChangedDelta, [lambda delta: self._reflectItemPosDelta(y, delta)])
+        y.setEditable(False)
+                
+    def disconnectObjectFromItsImage(self, x, y):
+        hash = self.uidPairHash(x, y)
+        self.disconnectSignals(hash)
         
     def _reflectItemPosDelta(self, item, delta):
         if self._reflectGfx:
             item.setPos(item.pos() + delta)
                
-    def deleteFromMap(self, item):
+    def deleteMapping(self, item):
         del self._map[item.uid()]
         
     def connectMorphismToItsImage(self, f, g):
         F = self;  C = F.domain();  D = F.codomain()
-        f.nameChanged.connect(lambda name: g.setName(F(name)))
-        f.deleted.connect(g.delete)
-        f.deleted.connect(lambda: self.deleteFromMap(f))
-        f.domainSet.connect(lambda dom: self._reflectDomainSet(g, dom))
-        f.codomainSet.connect(lambda cod: self._reflectCodomainSet(g, cod))
-        f.bezierToggled.connect(lambda b: self._reflectToggleBezier(g, b))
-        f.controlPointsPosChanged.connect(lambda pos_list: self._reflectControlPointPos(g, pos_list))
-    
+        hash = self.uidPairHash(f, g)
+        self.connectSignal(hash, self.symbolChanged, [lambda sym: g.setSymbol(F(str(f)))])
+        self.connectSignal(hash, f.symbolChanged, [lambda sym: g.setSymbol(F(sym))])
+        self.connectSignal(hash, f.deleted, [lambda a: g.delete(), self.deleteMapping])
+        self.connectSignal(hash, f.domainSet, [lambda dom: self._reflectDomainSet(g, dom)])
+        self.connectSignal(hash, f.codomainSet, [lambda cod: self._reflectCodomainSet(g, cod)])
+        self.connectSignal(hash, f.bezierToggled, [lambda b: self._reflectToggleBezier(g, b)])
+        self.connectSignal(hash, f.controlPointsPosChanged, [lambda pos_list: self._reflectControlPointPos(g, pos_list)])
+        g.setEditable(False)      
+        
+    def disconnectMorphismFromItsImage(self, f, g):
+        hash = self.uidPairHash(f, g)
+        self.disconnectSignals(hash)
+        
     def _reflectDomainSet(self, arr, dom):
         F = self;  C = self.domain();  D = self.codomain()
-        if dom:
+        if dom and D:
             d = D.getObject(F[dom.uid()])
             if d:
                 arr.setDomain(d)
+        else:
+            arr.setDomain(None)
             
     def _reflectCodomainSet(self, arr, cod):
         F = self;  C = self.domain();  D = self.codomain()
-        if cod:
+        if cod and D:
             d = D.getObject(F[cod.uid()])
             if d:
-                arr.setCodomain(d)            
+                arr.setCodomain(d)  
+        else:
+            arr.setCodomain(None)
     
     def _reflectToggleBezier(self, arr, toggle):
         if self._reflectGfx:
             arr.toggleBezier(toggle)
             
     def _reflectControlPointPos(self, arr, pos_list):
-        if len(pos_list) == 4:
-            if not arr.isBezier():
-                arr.toggleBezier(True)
-        elif len(pos_list) == 2:
-            if arr.isBezier():
-                arr.toggleBezier(False)
-        else:
-            raise NotImplementedError
-        arr.setPointPositions(pos_list)
+        if self._reflectGfx:
+            if len(pos_list) == 4:
+                if not arr.isBezier():
+                    arr.toggleBezier(True)
+            elif len(pos_list) == 2:
+                if arr.isBezier():
+                    arr.toggleBezier(False)
+            else:
+                raise NotImplementedError
+            arr.setPointPositions(pos_list)
     
-    def deleteFromMap(self, item):
-        if item.uid() in self._map:
+    def deleteMapping(self, item):
+        if isinstance(item, str):
+            if item in self._map:
+                del self._map[item]
+        elif item.uid() in self._map:
             del self._map[item.uid()]
     
-    def undoTakeImage(self, undoable=False):
-        if self.isFullyAttachedFunctor():
-            if undoable:
-                getText = lambda: "Undo take functor image " + self(str(self.domain()))
-                command = MethodCallCommand(getText(), self.undoTakeImage, [], self.takeImage, [dict(self._map), deepcopy(self._memo)], self.editor())
-                self.editor().pushCommand(command)
-                self.nameChanged.connect(lambda name: command.setText(getText()))
-                self.domain().nameChanged.connect(lambda name: command.setText(getText()))
-            else:
-                G = self
-                C = G.domain()
-                D = G.codomain()
-                for x in C.objects().values():
-                    if x.uid() in G:
-                        y = G[x.uid()]   # returns a uid of an object in D
-                        y = D.getObject(y)
-                        if y:
-                            D.removeObject(y, emit=False)
-                            for f in y.outgoingArrows():
-                                if f.uid() in G:
-                                    g = G[f.uid()]
-                                    g = D.getMorphism(g)
-                                    D.removeMorphism(g, emit=False) 
-                self._memo.clear()
-                self._map.clear()
+    def undoTakeImage(self, dom=None, cod=None):
+        if dom is None:
+            dom = self.domain()
+        if cod is None:
+            cod = self.codomain()
+        if dom and cod and cod.nonempty():
+            getText = lambda: "Undo taking functor image " + self(str(self.domain()))
+            command = TakeFunctorImage(getText(), dom, cod, functor=self, editor=self.editor(), swap=True)
+            self.editor().pushCommand(command)
+            self.symbolChanged.connect(lambda sym: command.setText(getText()))
+            self.domain().symbolChanged.connect(lambda sym: command.setText(getText()))
                                 
-    def updateImage(self, loops=None):
-        if self.isFullyAttachedFunctor():
-            if loops is None:
-                loops = 1            
-            C = self.domain()
-            D = self.codomain()
-            F = self
-            for x in list(C.objects().values()):   # endofunctors require a copy here
-                if x.uid() not in self._map:
-                    y = F[x.uid()] = F(x)
-                    D.addObject(y, loops=loops)
-                    self.connectObjectToItsImage(x, y)
-            for f in list(C.morphisms().values()):
-                if f.uid() not in self._map:
-                    g = F[f.uid()] = F(f)
-                    D.addMorphism(g, loops=loops)    # BUFIX add g here not f!
-                    self.connectMorphismToItsImage(f, g)
+    def updateImage(self, undoable=False):
+        if self.domain().nonempty():
+            if undoable:
+                getText = lambda: "Update functor image " + self(str(self.domain()))
+                command = UpdateFunctorImage(getText(), functor=self, editor=self.editor())
+                self.symbolChanged.connect(lambda sym: command.setText(getText()))
+                self.domain().symbolChanged.connect(lambda sym: command.setText(getText()))
+                self.editor().pushCommand(command)
+            else:
+                if self.domain() and self.codomain():
+                    command = UpdateFunctorImage("dummy", functor=self, editor=self.editor())
+                    command.redo()
                             
     def setTo(self, cod, undoable=False):
-        assert(cod is None or isinstance(cod, Diagram))
+        assert(cod is None or isinstance(cod, CategoryDiagram))
         if cod is not self.codomain():
-            super().setTo(cod, undoable)
             if cod is not None:
-                self.takeImage(undoable=undoable)
+                if undoable:
+                    self.takeImage(cod=cod)
             else:
-                self.undoTakeImage(undoable=undoable)
+                if undoable:
+                    self.undoTakeImage(cod=cod)    
+            super().setTo(cod, undoable)    
             
     def setFrom(self, dom, undoable=False):
-        assert(dom is None or isinstance(dom, Diagram))
+        assert(dom is None or isinstance(dom, CategoryDiagram))
         if dom is not self.domain():
-            if dom is None:
-                self.undoTakeImage(undoable)
+            if dom is not None:
+                if undoable:
+                    self.takeImage()
+            else:
+                if undoable:
+                    self.undoTakeImage()
             super().setFrom(dom, undoable)
         
     def isFullyAttachedFunctor(self):
-        return isinstance(self.codomain(), Diagram) and isinstance(self.domain(), Diagram)
+        return isinstance(self.codomain(), CategoryDiagram) and isinstance(self.domain(), CategoryDiagram)
         
     def __contains__(self, uid):
         return uid in self._map
@@ -180,8 +190,19 @@ class Functor(CategoryArrow):
         self._map[preimage] = image
         return image
     
-    def __delitem__(self, uid):
-        del self._map[uid]
+    def mapping(self):
+        return self._map
+    
+    def clearMapping(self):
+        self._map.clear()
+        self._memo.clear()
+        self.disconnectRemainingSignals()
+        
+    def setMapping(self, mapping):
+        self._map = mapping
+        
+    def updateMapping(self, mapping):
+        self._map.update(mapping)
     
     def __call__(self, *args):
         memo = self._memo
@@ -189,14 +210,22 @@ class Functor(CategoryArrow):
             x = args[0]
             if isinstance(x, CategoryObject):
                 y = deepcopy(x, memo)
-                y.setName(self(str(y)))
+                y.setSymbol(self(str(x)))
+                y.setEditable(False)
                 res = y
             elif isinstance(x, CategoryArrow):
-                g = deepcopy(x, memo)        # Deepcopy memoization fixes many bugs
-                g.setName(self(str(g)))
+                f = x
+                g = deepcopy(f, memo)        # Deepcopy memoization fixes many bugs
+                g.setSymbol(self(str(f)))
+                g.setEditable(False)
                 res = g
             elif isinstance(x, str):
-                res =  str(self) + "(" + x + ")"
+                fun_name = str(self)
+                if '.' not in fun_name:
+                    res =  str(self) + "(" + x + ")"
+                else:
+                    i = fun_name.index('.')   # Take first, ignore the rest
+                    res = fun_name[:i] + x + fun_name[i+1:]
             return res
         else:
             raise NotImplementedError

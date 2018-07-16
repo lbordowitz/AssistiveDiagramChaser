@@ -11,10 +11,10 @@ from copy import deepcopy
 
 class GraphNode(GfxObject, LabeledGfx):
     DefaultRect = QRectF(-15, -15, 30, 30)
-    DefaultCornerRadius = 10
+    DefaultCornerRadius = 7
     DefaultInsetPadding = 15
     Circle, RoundedRect = range(2)
-    nameChanged = pyqtSignal(str)
+    symbolChanged = pyqtSignal(str)
     
     def __init__(self, new=True):
         super().__init__(new)
@@ -60,6 +60,7 @@ class GraphNode(GfxObject, LabeledGfx):
         copy = deepcopy(super(), memo)
         memo[id(self)] = copy
         copy._shape = self._shape
+        copy._defaultRect = QRectF(self._defaultRect)
         copy._insetPadding = self._insetPadding
         copy._cornerRadius = self._cornerRadius
         copy._arrows = deepcopy(self._arrows, memo)
@@ -262,11 +263,31 @@ class GraphNode(GfxObject, LabeledGfx):
     
     def updateGraph(self):
         self.updateArrows()
-        
-    def delete(self):
+    
+    def delete(self, deleted=None):
+        if deleted is None:
+            deleted = {}
+        deleted["arrows"] = []
         for arr in self.arrows():
             if arr.toNode() is self:
                 arr.setTo(None)
+                deleted["arrows"].append((arr, 1))
             else:
                 arr.setFrom(None)
-        super().delete()
+                deleted["arrows"].append((arr, 0))
+        super().delete(deleted)
+        return deleted
+
+    def undelete(self, deleted, emit=True):
+        super().undelete(deleted, emit=False)
+        for arr, isstart in deleted["arrows"]:
+            if isstart == 0:
+                arr.setFrom(self)
+            else:
+                arr.setTo(self)
+        if emit:
+            self.undeleted.emit(self)
+
+    def setEditable(self, editable):
+        super().setEditable(editable)
+        super().setEditable(editable)        

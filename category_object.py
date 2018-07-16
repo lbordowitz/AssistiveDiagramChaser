@@ -3,7 +3,7 @@ from text_item import TextItem
 from PyQt5.QtWidgets import QGraphicsProxyWidget
 from PyQt5.QtGui import QMoveEvent, QColor
 from PyQt5.QtCore import QEvent, Qt, QRectF
-from qt_tools import SimpleBrush
+from qt_tools import SimpleBrush, Pen
 from geom_tools import minBoundingRect
 from copy import deepcopy
 
@@ -14,7 +14,9 @@ class CategoryObject(GraphNode):
             label = TextItem("x")
             self.addLabel(label)
             self.centerChild(label)
+            #label.setFlag(self.ItemIsMovable, False)
             self.setBrush(SimpleBrush(QColor(255,255,255,0)))   # Transparent
+            self.setPen(Pen(QColor(255, 50, 0, 200), 0.88))
             self._insetPadding = self.DefaultInsetPadding / 3
         self._graphAlgoVisited = False
         self._editor = None
@@ -59,5 +61,3 @@ class CategoryObject(GraphNode):
                         
     def attachArrow(self, arr):
         super().attachArrow(arr)
-        
-            
