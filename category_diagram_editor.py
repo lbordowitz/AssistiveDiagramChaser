@@ -10,6 +10,7 @@ from graph_arrow import ControlPoint
 from category_diagram import CategoryDiagram
 from functor import Functor
 from commands import MethodCallCommand, DeleteItemsCommand
+from op_functor import OpFunctor
 
 class CategoryDiagramEditor(GraphEditor):
     def __init__(self, window, new=True):
@@ -25,6 +26,43 @@ class CategoryDiagramEditor(GraphEditor):
         scene.backgroundColorChanged.connect(lambda color: self._autoSetCodeColor(simpleMaxContrastingColor(color)))
         scene.setGridEnabled(True)
         self.setupDefaultUserExperience()
+        
+    def placeArrow(self, arr=None, item=None, pos=None):
+        if pos is None:
+            pos = self.scene().menuEventScenePos()
+        item = self.scene().itemAt(pos, QTransform())
+        if item:
+            if isinstance(item, CategoryDiagram):
+                C = item
+                if arr:
+                    F = arr
+                else:
+                    F = Functor()
+                    F.setLabelText(0, "F")     
+                F.setEditor(self)
+                F.setDomain(C)
+                F.setContextMenu(self.buildArrowContextMenu(F))
+                self.addArrow(F)
+                self.scene().placeItems(F.toPoint(), pos)
+                item = F
+            elif isinstance(item, CategoryObject):
+                if not arr:
+                    arr = self.ArrowType()
+                self.setupArrowConnections(arr)
+                arr.setEditor(self)
+                arr.setDomain(item)
+                parent = item.parentItem()
+                if parent:
+                    parent.addMorphism(arr, undoable=True)
+                    add = False
+                    pos = parent.mapFromScene(pos)
+                else:
+                    add = True
+                self.scene().placeItems(arr.toPoint(), pos, add=add)
+                item = arr    
+        if isinstance(item, CategoryArrow):
+            item.setFlag(item.ItemIsMovable, False)                
+        return item
         
     def placeItem(self, pos):
         item = self.scene().itemAt(pos, QTransform())
@@ -46,7 +84,7 @@ class CategoryDiagramEditor(GraphEditor):
                 F = Functor()
                 F.setLabelText(0, "F")     
                 F.setEditor(self)
-                F.setFrom(C)
+                F.setDomain(C)
                 F.setContextMenu(self.buildArrowContextMenu(F))
                 self.addArrow(F)
                 self.scene().placeItems(F.toPoint(), pos)
@@ -55,7 +93,7 @@ class CategoryDiagramEditor(GraphEditor):
                 arr = self.ArrowType()
                 self.setupArrowConnections(arr)
                 arr.setEditor(self)
-                arr.setFrom(item)
+                arr.setDomain(item)
                 parent = item.parentItem()
                 if parent:
                     parent.addMorphism(arr, undoable=True)
@@ -98,6 +136,10 @@ class CategoryDiagramEditor(GraphEditor):
     def buildCategoryContextMenu(self, cat, menu=None):
         if menu is None:
             menu = QMenu()
+        functors = menu.addMenu("Functor")
+        op = functors.addAction("op")
+        op.triggered.connect(lambda: self.placeArrow(OpFunctor()))  
+        menu.addSeparator()
         menu = self.buildNodeContextMenu(cat, menu)
         menu.addSeparator()
         menu.addAction("Compose Arrows").triggered.connect(lambda b: cat.composeArrows())
@@ -110,13 +152,13 @@ class CategoryDiagramEditor(GraphEditor):
     
     def arrowExtremityAboutToChange(self, arr, pos, is_start=False):
         if is_start:
-            if arr.fromNode():
-                arr.fromNode().updateArrowsAndClearResidual()
-            arr.setFrom(None, undoable=True)
+            if arr.domain():
+                arr.domain().updateArrowsAndClearResidual()
+            arr.setDomain(None, undoable=True)
         else:
-            if arr.toNode():
-                arr.toNode().updateArrowsAndClearResidual()
-            arr.setTo(None, undoable=True)    
+            if arr.codomain():
+                arr.codomain().updateArrowsAndClearResidual()
+            arr.setCodomain(None, undoable=True)    
     
     def arrowExtremityHasChanged(self, arr, pos, is_start=False):
         items = self.scene().items(pos)
@@ -135,21 +177,22 @@ class CategoryDiagramEditor(GraphEditor):
                 if item:  # There is a node!
                     if arr.canConnectTo(item, is_start):
                         if is_start:
-                            arr.setFrom(item, undoable=True)
+                            arr.setDomain(item, undoable=True)
                         else:
-                            arr.setTo(item, undoable=True)
+                            arr.setCodomain(item, undoable=True)
                         break 
         else:
             # There is no sufficient item at pos
             if is_start:
-                arr.setFrom(None, undoable=True)
+                arr.setDomain(None, undoable=True)
             else:
-                arr.setTo(None, undoable=True)            
+                arr.setCodomain(None, undoable=True)            
             
     def buildSceneContextMenu(self, menu=None):
         if menu is None:
             menu = QMenu()
-        return super().buildSceneContextMenu(menu)
+        #self.buildBuiltinsMenu(menu)
+        return super().buildSceneContextMenu(menu)      
     
     def deleteItems(self, items=None, undoable=False):
         if items is None:
@@ -168,3 +211,5 @@ class CategoryDiagramEditor(GraphEditor):
             for item in filtered:
                 item.delete()   
                 
+    def categoryLabel(self):
+        return self.symbolLabel()

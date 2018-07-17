@@ -136,4 +136,8 @@ class LabeledGfx:
     def setEditable(self, editable):
         for label in self._labels:
             label.setEditable(editable)
+            
+    def symbolLabel(self):
+        return self.label(0)
+    
     

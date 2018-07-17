@@ -14,7 +14,7 @@ class CategoryDiagram(CategoryObject):
         super().__init__(new)
         self._editing = False
         if new:
-            self.setBrush(SimpleBrush(QColor(255,0,127,200)))   # Semi-transparent
+            self.setBrush(SimpleBrush(QColor(10,255,12,70)))   # Semi-transparent
             self.setPen(Pen(Qt.NoPen))
             self.setLabelText(0, "C")
             pos = self.label(0).pos()
@@ -25,7 +25,7 @@ class CategoryDiagram(CategoryObject):
         if self.isSelected() and self.scene():
             paintSelectionShape(painter, self)
         painter.setRenderHints(painter.Antialiasing | painter.HighQualityAntialiasing)
-        painter.setPen(self.pen())
+        painter.setPen(self.painterPen())
         painter.setBrush(self.brush())
         r = self._cornerRadius
         painter.drawRoundedRect(self.boundingRect(), r, r)
@@ -180,3 +180,12 @@ class CategoryDiagram(CategoryObject):
         elif self._objects:
             res = True
         return res
+    
+    def categoryLabel(self):
+        return self.label(0)
+    
+    def category(self):
+        return self.labelText(self.categoryLabel())
+    
+    def setCategory(self, cat):
+        self.setLabelText(0, cat)

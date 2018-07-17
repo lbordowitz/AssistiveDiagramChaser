@@ -145,7 +145,7 @@ class GraphNode(GfxObject, LabeledGfx):
             painter.setRenderHints(self.renderHints())
             painter.setBrush(self.brush())
             if self._hover:
-                painter.setPen(self.pen())
+                painter.setPen(self.painterPen())
             else:
                 painter.setPen(QPen(Qt.NoPen))
             if self._shape == self.RoundedRect:

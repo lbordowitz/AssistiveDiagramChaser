@@ -15,10 +15,11 @@ class TextItem(QGraphicsTextItem):
         super().__init__(text)
         if new:
             self._editable = None
-            self._editableColor = QColor(255, 255, 0, 240)
+            self._editColor = QColor(Qt.yellow)
             self._colorSave = None
             self.setEditable(False)
             self.setupConnections()
+            self._constraints = []
         self.setDefaultTextColor(QColor(Qt.darkMagenta))
         self.onTextChanged = []
         self.setFlags(self.ItemIsMovable | self.ItemIsFocusable | self.ItemIsSelectable | self.ItemSendsGeometryChanges)
@@ -72,13 +73,13 @@ class TextItem(QGraphicsTextItem):
     def __deepcopy__(self, memo):
         copy = type(self)(new=False)
         copy._editable = self._editable
-        copy._editableColor = QColor(self._editableColor)
+        copy._editColor = QColor(self._editColor)
         copy._colorSave = QColor(self._colorSave)
         copy.setPlainText(self.toPlainText())
         memo[id(self)] = copy
         copy.setFlags(self.flags())
         copy.setDefaultTextColor(self.defaultTextColor())
-        copy._undoStack = None              # Can't copy an undo stack since it holds references to this item and will change /it/
+        copy._constraints = deepcopy(self._constraints, memo)
         copy.setPos(self.pos())
         copy.setupConnections()
         return copy
@@ -173,15 +174,15 @@ class TextItem(QGraphicsTextItem):
             self._editable = editable
             if editable:
                 self._colorSave = self.color()
-                self.setColor(self._editableColor)
+                self.setColor(self._editColor)
             else:
                 if self._colorSave:
                     self.setColor(self._colorSave)
                 self._colorSave = None
             self.update()
             
-    def setEditableColor(self, color):
-        self._editableColor = color
+    def setEditColor(self, color):
+        self._editColor = color
         self.update()
             
     def editable(self):
@@ -192,3 +193,13 @@ class TextItem(QGraphicsTextItem):
         
     def color(self):
         return self.defaultTextColor()
+    
+    def constraints(self):
+        return self._constraints
+    
+    def isConstrained(self):
+        return self._constraints != []    
+    
+    def addConstraint(self, constraint):
+        self._constraints.append(constraint)
+        

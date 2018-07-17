@@ -20,13 +20,14 @@ class GraphScene(QGraphicsScene):
         self._contextMenu = None
         if new:
             self.setBackgroundBrush(QBrush(QColor(150,150,150)))
-            self._gridSizeX = 20
-            self._gridSizeY = 20
+            self._gridSizeX = 14
+            self._gridSizeY = 14
             self._gridEnabled = False
             self._gridOrigin = QPointF()
             self._pickGridOrigin = False      
             self._editor = None
         self._placing = False
+        self._menuEventPos = QPointF()
             
     def setEditor(self, editor):
         self._editor = editor
@@ -122,7 +123,11 @@ class GraphScene(QGraphicsScene):
                 item.setPos(item.pos() + delta)
         super().mouseMoveEvent(event)
         
+    def menuEventScenePos(self):
+        return self._menuEventPos
+        
     def contextMenuEvent(self, event):
+        self._menuEventPos = event.scenePos()
         item = self.itemAt(event.scenePos(), QTransform())
         if self._contextMenu and item is None:
             self._contextMenu.exec_(event.screenPos())
@@ -143,7 +148,8 @@ class GraphScene(QGraphicsScene):
             for x in range(left, int(rect.right()), self._gridSizeX):
                 for y in range(top, int(rect.bottom()), self._gridSizeY):
                     points.append(QPointF(x + ox, y + oy))
-            painter.drawPoints(*points)
+            if points:
+                painter.drawPoints(*points)
             # Draw grid origin
             painter.drawLine(QLineF(o.x(), o.y() - 20, o.x(), o.y() + 20))
             painter.drawLine(QLineF(o.x() - 20, o.y(), o.x() + 20, o.y()))    

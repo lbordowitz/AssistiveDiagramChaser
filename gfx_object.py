@@ -23,28 +23,22 @@ class GfxObject(QGraphicsObject):
         if new:
             self._editable = True
             self._editPen = Pen(QColor(Qt.green), 1.0)
-            self._penSave = None            
+            self._penSave = None 
             self._pen = Pen(Qt.NoPen)
             self._brush = SimpleBrush(Qt.NoBrush)
             self._locked = False
+            self._constraints = []
         self._zoomThreshold = self.DefaultZoomThreshold
         self._zoom = 0
         self._commands = []
         self._uid = str(uuid4())
-        
+                
     def setEditable(self, editable):
         if self._editable != editable:
             self._editable = editable
-            if editable:
-                self._penSave = self.pen()
-                self.setPen(self._editPen)
-            else:
-                if self._penSave:
-                    self.setPen(self._penSave)
-                    self._penSave = None
             self.update()
             
-    def setEditablePen(self, pen):
+    def setEditPen(self, pen):
         self._editPen = pen
         self.update()
             
@@ -87,6 +81,7 @@ class GfxObject(QGraphicsObject):
         copy.setFlags(self.flags())
         copy._locked = self._locked
         copy._editable = self._editable
+        copy._constraints = deepcopy(self._constraints, memo)
         copy._editPen = deepcopy(self._editPen, memo)
         copy._penSave = deepcopy(self._penSave, memo)   
         return copy
@@ -273,3 +268,15 @@ class GfxObject(QGraphicsObject):
             
     def uidPairHash(self, x, y):
         return x.uid() + "," + y.uid()
+    
+    def constraints(self):
+        return self._constraints
+    
+    def isConstrained(self):
+        return self._constraints != []
+    
+    def painterPen(self):
+        if self._editable:
+            return self._editPen
+        else:
+            return self.pen()    

@@ -1,6 +1,6 @@
 from PyQt5.QtCore import pyqtSignal, Qt, QRectF, QLineF, QPointF, QTimer
 from PyQt5.QtWidgets import QGraphicsObject, QGraphicsSceneMouseEvent, QMenu, QAction
-from PyQt5.QtGui import QBrush, QPainter, QPainterPath, QPolygonF, QPainterPathStroker
+from PyQt5.QtGui import QBrush, QPainter, QPainterPath, QPolygonF, QPainterPathStroker, QColor
 from geom_tools import mag2D, dot2D, rectToPoly, paintSelectionShape
 from math import acos, asin, atan2, pi, sin, cos
 from gfx_object import GfxObject
@@ -27,7 +27,9 @@ class GraphArrow(GfxObject, LabeledGfx):
                 point.setPos(QPointF(0,0))
             self.setupConnections()
             self._pen = Pen(Qt.black, 1.5, Qt.SolidLine)
+            self._editPen = Pen(QColor(255, 255, 0, 240), 1.5, Qt.SolidLine)
             self._textPos = []
+            self._reversed = False
         self._arrowHead = None            
         self.setAcceptHoverEvents(True)
         self.setFlag(self.ItemIsMovable, False)
@@ -71,6 +73,7 @@ class GraphArrow(GfxObject, LabeledGfx):
         copy._from = deepcopy(self._from, memo)
         copy._pen = deepcopy(self._pen, memo)
         copy._textPos = [None for text_pos in self._textPos]
+        copy._reversed = self._reversed
         self.copyLabelsTo(copy)
         copy.setupConnections()
         copy.updateArrowHead()
@@ -183,7 +186,7 @@ class GraphArrow(GfxObject, LabeledGfx):
         if self.isSelected():
             paintSelectionShape(painter, self)
         painter.setRenderHint(QPainter.Antialiasing)
-        painter.setPen(self.pen())
+        painter.setPen(self.painterPen())
         painter.setBrush(QBrush(Qt.NoBrush))
         painter.drawPath(self._arrowHead)        
         bezier_path = QPainterPath()
@@ -204,10 +207,18 @@ class GraphArrow(GfxObject, LabeledGfx):
         self.update()
         
     def updateArrowHead(self):
+        line = self.line()
         if not self.isBezier():
-            u = self.line().p2() - self.line().p1()
+            if self._reversed:
+                u = line.p1() - line.p2()
+            else:
+                u = line.p2() - line.p1()
         else:
-            u = self._points[-1].pos() - self._points[-2].pos()
+            if self._reversed:
+                u = self._points[0].pos() - self._points[1].pos()
+            else:
+                u = self._points[-1].pos() - self._points[-2].pos()
+                            
         mag_u = mag2D(u)
         if mag_u == 0.0:
             self._arrowHead = QPainterPath()
@@ -215,7 +226,10 @@ class GraphArrow(GfxObject, LabeledGfx):
         u /= mag_u
         v = QPointF(-u.y(), u.x())      # perp vector
         path = QPainterPath()
-        tip = self.line().p2()
+        if self._reversed:
+            tip = line.p1()
+        else:
+            tip = line.p2()
         size = self.arrowHeadSize()
         p = tip - (u + v) * size
         q = tip + (v - u) * size
@@ -481,3 +495,12 @@ class GraphArrow(GfxObject, LabeledGfx):
     def setEditable(self, editable):
         super().setEditable(editable)
         super().setEditable(editable)
+        
+    def setReversed(self, rev=True):
+        if self._reversed != rev:
+            self._reversed = rev  
+            self.updateArrowHead()
+            self.update()
+    
+    def reversed(self):
+        return self._reversed    

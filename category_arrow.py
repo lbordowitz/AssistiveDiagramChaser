@@ -25,6 +25,7 @@ class CategoryArrow(GraphArrow):
             self._mono = False
             self._isom = False
             self._editor = None
+            self._reversed = False
         self._graphAlgoVisited = False
         
     def __deepcopy__(self, memo):
@@ -35,6 +36,7 @@ class CategoryArrow(GraphArrow):
         copy._mono = self._mono
         copy._isom = self._isom
         copy._editor = self._editor
+        copy._reversed = self._reversed
         return copy
     
     def editor(self):
@@ -127,7 +129,7 @@ class CategoryArrow(GraphArrow):
             if self.isSelected():
                 paintSelectionShape(painter, self)
             painter.setRenderHints(QPainter.HighQualityAntialiasing | QPainter.Antialiasing)
-            painter.setPen(self.pen())
+            painter.setPen(self.painterPen())
             painter.setBrush(QBrush(Qt.NoBrush))
             if self._epi:
                 self._paintEpiHead(painter)
@@ -211,11 +213,11 @@ class CategoryArrow(GraphArrow):
         fun = self.labelText(0)
         return re.compile(fun + r'\((?P<arg>.+)\)')
     
-    def setTo(self, cod, undoable=False):
+    def _setCodomain(self, cod, undoable=False):
         if cod is not self.codomain():
             if undoable:
                 getText = lambda: "Set codomain of " + str(self) + " to " + str(cod)
-                command = MethodCallCommand(getText(), self.setTo, [cod], self.setTo, [self.domain()], self.editor())
+                command = MethodCallCommand(getText(), self.setCodomain, [cod], self.setCodomain, [self.codomain()], self.editor())
                 slot = lambda symbol: command.setText(getText())
                 self.symbolChanged.connect(slot)
                 if cod is not None:
@@ -225,11 +227,11 @@ class CategoryArrow(GraphArrow):
                 super().setTo(cod)
             self.codomainSet.emit(cod)
         
-    def setFrom(self, dom, undoable=False):
+    def _setDomain(self, dom, undoable=False):
         if dom is not self.domain():
             if undoable:
                 getText = lambda: "Set domain of " + str(self) + " to " + str(dom)
-                command = MethodCallCommand(getText(), self.setFrom, [dom], self.setFrom, [self.codomain()], self.editor())
+                command = MethodCallCommand(getText(), self.setDomain, [dom], self.setDomain, [self.domain()], self.editor())
                 slot = lambda symbol: command.setText(getText())
                 self.symbolChanged.connect(slot)
                 if dom is not None:
@@ -240,13 +242,17 @@ class CategoryArrow(GraphArrow):
             self.domainSet.emit(dom)
                 
     def domain(self):
+        if self._reversed:
+            return self.toNode()
         return self.fromNode()
     
     def codomain(self):
+        if self._reversed:
+            return self.fromNode()
         return self.toNode()
         
-    def canConnectTo(self, item, at_start):
-        if at_start:
+    def canConnectTo(self, item, at_tail):
+        if at_tail:
             other_end = self.codomain()
         else:
             other_end = self.domain()
@@ -258,8 +264,16 @@ class CategoryArrow(GraphArrow):
             return True
         return False
               
-    def setDomain(self, dom):
-        self.setFrom(dom)
+    def setDomain(self, dom, undoable=False):
+        if self._reversed:
+            self._setCodomain(dom, undoable)
+        else:
+            self._setDomain(dom, undoable)
                 
-    def setCodomain(self, cod):
-        self.setTo(cod)
+    def setCodomain(self, cod, undoable=False):
+        if self._reversed:
+            self._setDomain(cod, undoable)
+        else:
+            self._setCodomain(cod, undoable)
+    
+            

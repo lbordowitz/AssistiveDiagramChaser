@@ -1,7 +1,7 @@
 from category_arrow import CategoryArrow
 from category_diagram import CategoryDiagram
 from PyQt5.QtWidgets import QGraphicsSceneHoverEvent, QMenu
-from commands import MethodCallCommand, TakeFunctorImage, UpdateFunctorImage
+from commands import MethodCallCommand, TakeFunctorImage
 from category_object import CategoryObject
 from copy import deepcopy
 
@@ -13,6 +13,7 @@ class Functor(CategoryArrow):
             self._map = {}
             self._signalsSlots = {}      # Keyed by uid
         self._memo = {}
+        self._contra = False    # covariance / contravariance
         
     def __deepcopy__(self, memo):
         copy = deepcopy(super(), memo)
@@ -20,15 +21,16 @@ class Functor(CategoryArrow):
         copy._map = deepcopy(self._map, memo)
         copy._reflectForward = self._reflectForward
         copy._reflectInverse = self._reflectInverse
+        copy._contra = self._contra
         
-    def takeImage(self, dom=None, cod=None):
+    def takeImage(self, dom=None, cod=None, contra=False):
         if dom is None:
             dom = self.domain()
         if cod is None:
             cod = self.codomain()
         if dom and cod and dom.nonempty():
-            getText = lambda: "Undo take functor image " + self(str(self.domain()))
-            command = TakeFunctorImage(getText(), dom, cod, functor=self, editor=self.editor())
+            getText = lambda: "Take the functor image " + self.imageString(dom) + "."
+            command = TakeFunctorImage(getText(), dom, cod, functor=self, editor=self.editor(), contra=contra)
             self.editor().pushCommand(command)
             self.symbolChanged.connect, lambda symbol: command.setText(getText())
             self.domain().symbolChanged.connect(lambda symbol: command.setText(getText()))
@@ -56,15 +58,16 @@ class Functor(CategoryArrow):
     def connectObjectToItsImage(self, x, y):
         F = self
         hash = self.uidPairHash(x, y)
-        self.connectSignal(hash, self.symbolChanged, [lambda sym: y.setSymbol(F(str(x)))])
-        self.connectSignal(hash, x.symbolChanged, [lambda sym: y.setSymbol(F(sym))])
+        self.connectSignal(hash, self.symbolChanged, [lambda sym: y.setSymbol(F.imageString(x))])
+        self.connectSignal(hash, x.symbolChanged, [lambda sym: y.setSymbol(F.imageString(x))])
         self.connectSignal(hash, x.deleted, [lambda o: y.delete(), self.deleteMapping])
         self.connectSignal(hash, x.positionChangedDelta, [lambda delta: self._reflectItemPosDelta(y, delta)])
         y.setEditable(False)
                 
     def disconnectObjectFromItsImage(self, x, y):
-        hash = self.uidPairHash(x, y)
-        self.disconnectSignals(hash)
+        if x and y:
+            hash = self.uidPairHash(x, y)
+            self.disconnectSignals(hash)
         
     def _reflectItemPosDelta(self, item, delta):
         if self._reflectGfx:
@@ -76,18 +79,23 @@ class Functor(CategoryArrow):
     def connectMorphismToItsImage(self, f, g):
         F = self;  C = F.domain();  D = F.codomain()
         hash = self.uidPairHash(f, g)
-        self.connectSignal(hash, self.symbolChanged, [lambda sym: g.setSymbol(F(str(f)))])
-        self.connectSignal(hash, f.symbolChanged, [lambda sym: g.setSymbol(F(sym))])
+        self.connectSignal(hash, self.symbolChanged, [lambda sym: g.setSymbol(F.imageString(f))])
+        self.connectSignal(hash, f.symbolChanged, [lambda sym: g.setSymbol(F.imageString(f))])
         self.connectSignal(hash, f.deleted, [lambda a: g.delete(), self.deleteMapping])
-        self.connectSignal(hash, f.domainSet, [lambda dom: self._reflectDomainSet(g, dom)])
-        self.connectSignal(hash, f.codomainSet, [lambda cod: self._reflectCodomainSet(g, cod)])
+        if self._contra:
+            self.connectSignal(hash, f.domainSet, [lambda dom: self._reflectCodomainSet(g, dom)])
+            self.connectSignal(hash, f.codomainSet, [lambda cod: self._reflectDomainSet(g, cod)])
+        else:
+            self.connectSignal(hash, f.domainSet, [lambda dom: self._reflectDomainSet(g, dom)])
+            self.connectSignal(hash, f.codomainSet, [lambda cod: self._reflectCodomainSet(g, cod)])
         self.connectSignal(hash, f.bezierToggled, [lambda b: self._reflectToggleBezier(g, b)])
         self.connectSignal(hash, f.controlPointsPosChanged, [lambda pos_list: self._reflectControlPointPos(g, pos_list)])
         g.setEditable(False)      
         
     def disconnectMorphismFromItsImage(self, f, g):
-        hash = self.uidPairHash(f, g)
-        self.disconnectSignals(hash)
+        if f and g:
+            hash = self.uidPairHash(f, g)
+            self.disconnectSignals(hash)
         
     def _reflectDomainSet(self, arr, dom):
         F = self;  C = self.domain();  D = self.codomain()
@@ -136,8 +144,8 @@ class Functor(CategoryArrow):
         if cod is None:
             cod = self.codomain()
         if dom and cod and cod.nonempty():
-            getText = lambda: "Undo taking functor image " + self(str(self.domain()))
-            command = TakeFunctorImage(getText(), dom, cod, functor=self, editor=self.editor(), swap=True)
+            getText = lambda: "Undo taking the functor image " + self.imageString(dom)
+            command = TakeFunctorImage(getText(), dom, cod, functor=self, editor=self.editor(), swap=True, contra=self.isContravariant())
             self.editor().pushCommand(command)
             self.symbolChanged.connect(lambda sym: command.setText(getText()))
             self.domain().symbolChanged.connect(lambda sym: command.setText(getText()))
@@ -145,17 +153,17 @@ class Functor(CategoryArrow):
     def updateImage(self, undoable=False):
         if self.domain().nonempty():
             if undoable:
-                getText = lambda: "Update functor image " + self(str(self.domain()))
-                command = UpdateFunctorImage(getText(), functor=self, editor=self.editor())
+                getText = lambda: "Update functor image " + self.imageString(self.domain()) + " of diagram."
+                command = TakeFunctorImage(getText(), self.domain(), self.codomain(), functor=self, editor=self.editor(), contra=self.isContravariant())
                 self.symbolChanged.connect(lambda sym: command.setText(getText()))
                 self.domain().symbolChanged.connect(lambda sym: command.setText(getText()))
                 self.editor().pushCommand(command)
             else:
                 if self.domain() and self.codomain():
-                    command = UpdateFunctorImage("dummy", functor=self, editor=self.editor())
+                    command = TakeFunctorImage("dummy", self.domain(), self.codomain(), functor=self, editor=self.editor(), contra=self.isContravariant())
                     command.redo()
                             
-    def setTo(self, cod, undoable=False):
+    def _setCodomain(self, cod, undoable=False):
         assert(cod is None or isinstance(cod, CategoryDiagram))
         if cod is not self.codomain():
             if cod is not None:
@@ -164,9 +172,9 @@ class Functor(CategoryArrow):
             else:
                 if undoable:
                     self.undoTakeImage(cod=cod)    
-            super().setTo(cod, undoable)    
+            super()._setCodomain(cod, undoable)    
             
-    def setFrom(self, dom, undoable=False):
+    def _setDomain(self, dom, undoable=False):
         assert(dom is None or isinstance(dom, CategoryDiagram))
         if dom is not self.domain():
             if dom is not None:
@@ -175,7 +183,7 @@ class Functor(CategoryArrow):
             else:
                 if undoable:
                     self.undoTakeImage()
-            super().setFrom(dom, undoable)
+            super()._setDomain(dom, undoable)
         
     def isFullyAttachedFunctor(self):
         return isinstance(self.codomain(), CategoryDiagram) and isinstance(self.domain(), CategoryDiagram)
@@ -210,30 +218,41 @@ class Functor(CategoryArrow):
             x = args[0]
             if isinstance(x, CategoryObject):
                 y = deepcopy(x, memo)
-                y.setSymbol(self(str(x)))
+                y.setSymbol(self.imageString(x))
                 y.setEditable(False)
                 res = y
             elif isinstance(x, CategoryArrow):
                 f = x
                 g = deepcopy(f, memo)        # Deepcopy memoization fixes many bugs
-                g.setSymbol(self(str(f)))
+                g.setSymbol(self.imageString(f))
                 g.setEditable(False)
+                g.setReversed(self.isContravariant())
                 res = g
-            elif isinstance(x, str):
-                fun_name = str(self)
-                if '.' not in fun_name:
-                    res =  str(self) + "(" + x + ")"
-                else:
-                    i = fun_name.index('.')   # Take first, ignore the rest
-                    res = fun_name[:i] + x + fun_name[i+1:]
+            else:
+                raise NotImplementedError
             return res
         else:
             raise NotImplementedError
+        
+    def imageString(self, f):
+        f = str(f)
+        fun_name = str(self)
+        if '.' not in fun_name:
+            res =  str(self) + "(" + f + ")"
+        else:
+            i = fun_name.index('.')   # Take first, ignore the rest
+            res = fun_name[:i] + x + fun_name[i+1:] 
+        return res
     
     def buildDefaultContextMenu(self, menu=None):
         if menu is None:
             menu = QMenu()
         super().buildDefaultContextMenu(menu)
+        menu.addSeparator()
+        act = menu.addAction("Contravariant")
+        act.setCheckable(True)
+        act.setChecked(self._contra)
+        act.toggled.connect(lambda tog: self.setContravariant(tog, undoable=True))
         menu.addSeparator()
         act = menu.addAction("Reflect Graphics")
         act.setCheckable(True)
@@ -244,3 +263,27 @@ class Functor(CategoryArrow):
     def setReflectGraphics(self, reflect):
         self._reflectGfx = reflect
         
+    def isContravariant(self):
+        return self._contra
+    
+    def setContravariant(self, contra, undoable=False):
+        if contra != self._contra:
+            if undoable:
+                if contra:
+                    word = "contravariant"
+                    logic = True
+                else:
+                    word = "covariant"
+                    logic = False
+                getText = lambda: "Let functor " + str(self) + " be " + word + "."
+                command = MethodCallCommand(getText(), self.setContravariant, [logic], self.setContravariant, [not logic], self.editor())
+                self.symbolChanged.connect(lambda sym: command.setText(getText()))
+                self.domain().symbolChanged.connect(lambda sym: command.setText(getText()))
+                self.editor().pushCommand(command)
+            else:
+                if self.codomain():
+                    revMap = { val : key for key, val in self._map.items() }
+                    for g in self.codomain().morphisms().values():
+                        g.setReversed(contra)
+                self._contra = contra
+                            
